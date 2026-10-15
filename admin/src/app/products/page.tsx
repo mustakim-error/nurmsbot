@@ -40,6 +40,7 @@ interface Product {
   name: string;
   price: number;
   stock: number;
+  icon?: string;
   description: string;
   payload: string;
   active: boolean;
@@ -57,6 +58,7 @@ export default function ProductsPage() {
     name: '',
     price: 0,
     stock: 10,
+    icon: '✨',
     description: '',
     payload: '',
     active: true,
@@ -81,6 +83,7 @@ export default function ProductsPage() {
       name: '',
       price: 0,
       stock: 10,
+      icon: '✨',
       description: 'Instant automated delivery. 30 Days Replacement Warranty.',
       payload: 'Your login credentials: email@domain.com | pass: Secret1234',
       active: true,
@@ -94,6 +97,7 @@ export default function ProductsPage() {
       name: p.name,
       price: p.price,
       stock: p.stock,
+      icon: p.icon || '✨',
       description: p.description || '',
       payload: p.payload || '',
       active: p.active !== undefined ? p.active : true,
@@ -111,6 +115,7 @@ export default function ProductsPage() {
           name: formData.name,
           price: Number(formData.price),
           stock: Number(formData.stock),
+          icon: formData.icon || '✨',
           description: formData.description,
           payload: formData.payload,
           active: formData.active,
@@ -121,6 +126,7 @@ export default function ProductsPage() {
           name: formData.name,
           price: Number(formData.price),
           stock: Number(formData.stock),
+          icon: formData.icon || '✨',
           description: formData.description,
           payload: formData.payload,
           active: formData.active,
@@ -244,64 +250,84 @@ export default function ProductsPage() {
                 <TableHead>Product Name</TableHead>
                 <TableHead>Price</TableHead>
                 <TableHead>Stock</TableHead>
+                <TableHead>Bot Button Appearance</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Auto-Delivery Credentials</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProducts.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell>
-                    <div className="font-semibold text-white text-sm">{p.name}</div>
-                    <div className="text-xs text-muted-foreground line-clamp-1">{p.description}</div>
-                  </TableCell>
-                  <TableCell className="font-mono font-bold text-primary">
-                    {p.price === 0 ? 'Free ($0)' : `$${Number(p.price).toFixed(2)}`}
-                  </TableCell>
-                  <TableCell className="font-mono">
-                    <Badge variant={p.stock > 0 ? "secondary" : "destructive"} className="text-[11px]">
-                      {p.stock > 0 ? `${p.stock} units` : 'Out of stock'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={p.active ? "success" : "secondary"} className="text-[11px]">
-                      {p.active ? (
-                        <span className="flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Visible in Bot
-                        </span>
-                      ) : (
-                        <span className="flex items-center gap-1">
-                          <XCircle className="w-3 h-3 text-muted-foreground" /> Hidden
-                        </span>
-                      )}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground max-w-[200px] truncate">
-                    {p.payload || <span className="text-muted-foreground/40 italic">None</span>}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <Button
-                        onClick={() => handleOpenEdit(p)}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              {filteredProducts.map((p) => {
+                const inStock = Number(p.stock) > 0;
+                return (
+                  <TableRow key={p.id}>
+                    <TableCell>
+                      <div className="font-semibold text-white text-sm flex items-center gap-1.5">
+                        <span className="text-base">{p.icon || '✨'}</span>
+                        {p.name}
+                      </div>
+                      <div className="text-xs text-muted-foreground line-clamp-1">{p.description}</div>
+                    </TableCell>
+                    <TableCell className="font-mono font-bold text-primary">
+                      {p.price === 0 ? 'Free ($0)' : `$${Number(p.price).toFixed(2)}`}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      <Badge variant={inStock ? "secondary" : "destructive"} className="text-[11px]">
+                        {inStock ? `${p.stock} units` : 'Out of stock'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {/* Telegram Native Button Color Preview */}
+                      <Badge
+                        className={`text-[11px] font-mono gap-1 border ${
+                          inStock
+                            ? 'bg-emerald-600/30 text-emerald-400 border-emerald-500/40'
+                            : 'bg-red-600/30 text-red-400 border-red-500/40'
+                        }`}
                       >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        onClick={() => handleDelete(p.id)}
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+                        <span className={`w-1.5 h-1.5 rounded-full ${inStock ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                        {inStock ? 'Green Button (Success)' : 'Red Button (Danger)'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={p.active ? "success" : "secondary"} className="text-[11px]">
+                        {p.active ? (
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3 text-emerald-400" /> Visible in Bot
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1">
+                            <XCircle className="w-3 h-3 text-muted-foreground" /> Hidden
+                          </span>
+                        )}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground max-w-[180px] truncate">
+                      {p.payload || <span className="text-muted-foreground/40 italic">None</span>}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <Button
+                          onClick={() => handleOpenEdit(p)}
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        >
+                          <Edit3 className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button
+                          onClick={() => handleDelete(p.id)}
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         )}
@@ -313,19 +339,29 @@ export default function ProductsPage() {
           <DialogHeader>
             <DialogTitle>{editingProduct ? 'Edit Digital Product' : 'Add New Digital Product'}</DialogTitle>
             <DialogDescription>
-              Configure details and instant delivery payload for the Telegram Bot.
+              Configure details, button icon, and instant delivery payload for the Telegram Bot.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSave} className="space-y-4 py-2 text-xs">
-            <div>
-              <label className="block font-medium text-foreground mb-1">Product Title</label>
-              <Input
-                required
-                placeholder="e.g. ChatGPT Plus 1m"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
+            <div className="grid grid-cols-4 gap-2">
+              <div className="col-span-3">
+                <label className="block font-medium text-foreground mb-1">Product Title</label>
+                <Input
+                  required
+                  placeholder="e.g. ChatGPT Plus 1m"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block font-medium text-foreground mb-1">Emoji / Icon</label>
+                <Input
+                  placeholder="e.g. 🤖"
+                  value={formData.icon}
+                  onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

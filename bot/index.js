@@ -3,23 +3,50 @@ const { Bot, InlineKeyboard } = require('grammy');
 const express = require('express');
 const { db } = require('./firebase');
 
-const token = process.env.BOT_TOKEN;
-if (!token) {
-  console.error('❌ Error: BOT_TOKEN is missing in environment variables.');
-  process.exit(1);
-}
+// Default Token embedded as requested so Render needs zero configuration!
+const token = process.env.BOT_TOKEN || '8711373245:AAGRz0PbAJ9tzac3VVr8zg_UBrIloXCT_fg';
 
 const bot = new Bot(token);
 
-// Default Fallback Settings
+// Comprehensive Customizable Default Bot Settings
 let botConfig = {
-  channelId: process.env.CHANNEL_ID || '@WarzoneShop',
-  channelLink: process.env.CHANNEL_LINK || 'https://t.me/WarzoneShop',
-  shopName: process.env.SHOP_NAME || 'Warzone Shop',
-  supportUsername: process.env.SUPPORT_USERNAME || '@mustakim_support',
+  // Channel & Support
+  shopName: 'Warzone Shop',
+  channelId: '@WarzoneShop',
+  channelLink: 'https://t.me/WarzoneShop',
+  supportUsername: '@mustakim_support',
+
+  // Payment Numbers
   bkashNumber: '01XXXXXXXXX',
   nagadNumber: '01XXXXXXXXX',
   binancePayId: '12345678',
+
+  // Customizable Texts (A to Z editable from Admin Panel)
+  forceSubMessage: '👋 Hey! {name} Please Join our Official channel to access this bot ❗',
+  joinChannelBtnText: '▶️ {shop_name}',
+  verifyJoinedBtnText: '✨ I Have Joined',
+
+  welcomeMessage: 'Welcome to {shop_name} 🎉\n👋 Hello! {name}\n\n📌 Account Details\n💳 Telegram ID: {user_id}\n💰 Balance: ${balance}\n\nChoose below 🔹',
+  shopMessage: '🛒 Available Products\n⬇️ Choose an option to buy:',
+  walletMessage: '💲 Wallet\n\n🪙 Current Balance: ${balance}\n\n"You can add balance to your wallet and use it to purchase products directly!"',
+
+  // Menu Button Texts & Styles (style: 'primary' | 'success' | 'danger')
+  btnShopText: '🛒 Shop',
+  btnShopStyle: 'primary',
+  btnWalletText: '💰 Wallet',
+  btnWalletStyle: 'primary',
+  btnOrderHistoryText: '🧾 Order History',
+  btnOrderHistoryStyle: 'primary',
+  btnMyOrdersText: '📦 My Orders',
+  btnMyOrdersStyle: 'primary',
+  btnReferText: '💸 Refer & Earn',
+  btnReferStyle: 'success',
+  btnProfileText: '🛡️ Profile',
+  btnProfileStyle: 'primary',
+  btnSupportText: '🗣️ Support',
+  btnSupportStyle: 'success',
+  btnAboutText: 'ℹ️ About',
+  btnAboutStyle: 'primary',
 };
 
 // Sync settings dynamically from Firebase Firestore in real-time
@@ -31,15 +58,10 @@ if (db) {
         if (doc && doc.exists) {
           const data = doc.data();
           botConfig = {
-            channelId: data.channelId || botConfig.channelId,
-            channelLink: data.channelLink || botConfig.channelLink,
-            shopName: data.shopName || botConfig.shopName,
-            supportUsername: data.supportUsername || botConfig.supportUsername,
-            bkashNumber: data.bkashNumber || botConfig.bkashNumber,
-            nagadNumber: data.nagadNumber || botConfig.nagadNumber,
-            binancePayId: data.binancePayId || botConfig.binancePayId,
+            ...botConfig,
+            ...data,
           };
-          console.log('🔄 Realtime Bot Config Synced from Firebase:', botConfig);
+          console.log('🔄 Realtime Bot Configuration Synced from Firebase!');
         }
       });
   } catch (err) {
@@ -47,11 +69,21 @@ if (db) {
   }
 }
 
+// Template variable replacement helper
+function formatText(template, variables = {}) {
+  if (!template) return '';
+  let result = template;
+  for (const [key, val] of Object.entries(variables)) {
+    result = result.replaceAll(`{${key}}`, String(val));
+  }
+  return result;
+}
+
 // Helper: Get or Create User in Firebase
 async function getUser(userId, userInfo = {}) {
   if (!db) {
     return {
-      telegram_id: userId,
+      telegram_id: String(userId),
       name: userInfo.first_name || 'User',
       username: userInfo.username || '',
       balance: 0.0,
@@ -75,7 +107,6 @@ async function getUser(userId, userInfo = {}) {
   }
 
   const existingUser = doc.data();
-  // Keep name and username updated
   if (userInfo.first_name && existingUser.name !== userInfo.first_name) {
     await userRef.update({
       name: userInfo.first_name,
@@ -94,31 +125,23 @@ async function isChannelMember(ctx, userId) {
     return validStatuses.includes(member.status);
   } catch (err) {
     console.error(`⚠️ Error checking chat member for ${userId}:`, err.message);
-    // If bot is not admin in the channel yet, return false with a log
     return false;
   }
 }
 
-// Helper: Main Menu Keyboard & Text Generator
-function getMainMenu(user) {
-  const name = user.name || 'User';
-  const balance = Number(user.balance || 0).toFixed(2);
-  const text = `Welcome to ${botConfig.shopName} 🎉\n👋 Hello! ${name}\n\n📌 Account Details\n💳 Telegram ID: ${user.telegram_id}\n💰 Balance: $${balance}\n\nChoose below 🔹`;
-
-  const keyboard = new InlineKeyboard()
-    .text('🛒 Shop', 'menu_shop')
-    .text('💰 Wallet', 'menu_wallet')
-    .row()
-    .text('🧾 Order History', 'menu_orders')
-    .text('📦 My Orders', 'menu_orders')
-    .row()
-    .text('💸 Refer & Earn', 'menu_refer')
-    .text('🛡️ Profile', 'menu_profile')
-    .row()
-    .url('🗣️ Support', `https://t.me/${botConfig.supportUsername.replace('@', '')}`)
-    .text('ℹ️ About', 'menu_about');
-
-  return { text, keyboard };
+// Helper: Create Inline Keyboard with Native Telegram API 9.4+ button styles
+// Supported styles: 'primary' (blue), 'success' (green), 'danger' (red)
+function createStyledKeyboard(rows) {
+  const inline_keyboard = rows.map((row) =>
+    row.map((btn) => {
+      const buttonObj = { text: btn.text };
+      if (btn.url) buttonObj.url = btn.url;
+      if (btn.callback_data) buttonObj.callback_data = btn.callback_data;
+      if (btn.style) buttonObj.style = btn.style; // Telegram Bot API 9.4+ native style
+      return buttonObj;
+    })
+  );
+  return { inline_keyboard };
 }
 
 // 1. /start Command Handler
@@ -126,27 +149,81 @@ bot.command('start', async (ctx) => {
   const userId = ctx.from.id;
   const firstName = ctx.from.first_name || 'Member';
 
-  // Always ensure user document exists in Firebase
+  // Ensure user exists in Firebase
   const user = await getUser(userId, ctx.from);
 
   // Check channel subscription
   const joined = await isChannelMember(ctx, userId);
 
   if (!joined) {
-    // Show Join Verification Screen (Matching Image 1)
-    const text = `👋 Hey! ${firstName} Please Join our Official channel to access this bot ❗`;
-    const keyboard = new InlineKeyboard()
-      .url(`▶️ ${botConfig.shopName}`, botConfig.channelLink)
-      .row()
-      .text('✨ I Have Joined', 'verify_joined');
+    // Show Join Verification Screen (Image 1)
+    const text = formatText(botConfig.forceSubMessage, {
+      name: firstName,
+      shop_name: botConfig.shopName,
+    });
 
-    return ctx.reply(text, { reply_markup: keyboard });
+    const reply_markup = createStyledKeyboard([
+      [
+        {
+          text: formatText(botConfig.joinChannelBtnText, { shop_name: botConfig.shopName }),
+          url: botConfig.channelLink,
+          style: 'primary',
+        },
+      ],
+      [
+        {
+          text: botConfig.verifyJoinedBtnText,
+          callback_data: 'verify_joined',
+          style: 'success', // Green button in Telegram
+        },
+      ],
+    ]);
+
+    return ctx.reply(text, { reply_markup });
   }
 
-  // If joined, show Main Menu (Matching Image 2)
-  const menu = getMainMenu(user);
-  return ctx.reply(menu.text, { reply_markup: menu.keyboard });
+  // If joined, show Main Menu (Image 2)
+  renderMainMenu(ctx, user);
 });
+
+// Helper: Render Main Menu (Image 2)
+function renderMainMenu(ctx, user, isEdit = false) {
+  const balance = Number(user.balance || 0).toFixed(2);
+  const text = formatText(botConfig.welcomeMessage, {
+    name: user.name || 'Member',
+    shop_name: botConfig.shopName,
+    user_id: user.telegram_id,
+    balance: balance,
+  });
+
+  const reply_markup = createStyledKeyboard([
+    [
+      { text: botConfig.btnShopText, callback_data: 'menu_shop', style: botConfig.btnShopStyle || 'primary' },
+      { text: botConfig.btnWalletText, callback_data: 'menu_wallet', style: botConfig.btnWalletStyle || 'primary' },
+    ],
+    [
+      { text: botConfig.btnOrderHistoryText, callback_data: 'menu_orders', style: botConfig.btnOrderHistoryStyle || 'primary' },
+      { text: botConfig.btnMyOrdersText, callback_data: 'menu_orders', style: botConfig.btnMyOrdersStyle || 'primary' },
+    ],
+    [
+      { text: botConfig.btnReferText, callback_data: 'menu_refer', style: botConfig.btnReferStyle || 'success' }, // Green button
+      { text: botConfig.btnProfileText, callback_data: 'menu_profile', style: botConfig.btnProfileStyle || 'primary' },
+    ],
+    [
+      {
+        text: botConfig.btnSupportText,
+        url: `https://t.me/${botConfig.supportUsername.replace('@', '')}`,
+        style: botConfig.btnSupportStyle || 'success', // Green button
+      },
+      { text: botConfig.btnAboutText, callback_data: 'menu_about', style: botConfig.btnAboutStyle || 'primary' },
+    ],
+  ]);
+
+  if (isEdit) {
+    return ctx.editMessageText(text, { reply_markup }).catch(() => ctx.reply(text, { reply_markup }));
+  }
+  return ctx.reply(text, { reply_markup });
+}
 
 // 2. "I Have Joined" Verification Callback Handler
 bot.callbackQuery('verify_joined', async (ctx) => {
@@ -161,15 +238,8 @@ bot.callbackQuery('verify_joined', async (ctx) => {
   }
 
   await ctx.answerCallbackQuery({ text: '✅ Verification successful! Welcome.' });
-
   const user = await getUser(userId, ctx.from);
-  const menu = getMainMenu(user);
-
-  try {
-    await ctx.editMessageText(menu.text, { reply_markup: menu.keyboard });
-  } catch (e) {
-    await ctx.reply(menu.text, { reply_markup: menu.keyboard });
-  }
+  renderMainMenu(ctx, user, true);
 });
 
 // 3. Back to Main Menu Handler
@@ -177,16 +247,10 @@ bot.callbackQuery('back_to_menu', async (ctx) => {
   await ctx.answerCallbackQuery();
   const userId = ctx.from.id;
   const user = await getUser(userId, ctx.from);
-  const menu = getMainMenu(user);
-
-  try {
-    await ctx.editMessageText(menu.text, { reply_markup: menu.keyboard });
-  } catch (e) {
-    await ctx.reply(menu.text, { reply_markup: menu.keyboard });
-  }
+  renderMainMenu(ctx, user, true);
 });
 
-// 4. Shop Menu Handler (Matching Image 3)
+// 4. Shop Menu Handler (Image 3 - with Red/Green stock buttons!)
 bot.callbackQuery('menu_shop', async (ctx) => {
   await ctx.answerCallbackQuery();
 
@@ -202,34 +266,57 @@ bot.callbackQuery('menu_shop', async (ctx) => {
     }
   }
 
-  // Fallback demo products if database has no items yet
+  // Fallback demo products if Firestore has no products yet
   if (products.length === 0) {
     products = [
-      { id: 'chatgpt-plus', name: 'ChatGPT Plus 1m', price: 0, stock: 5 },
-      { id: 'cursor-pro', name: 'Cursor Pro 1m + Grok Bot 1m', price: 0, stock: 3 },
-      { id: 'gemini-pro', name: 'Gemini AI PRO 18m 2nd Service', price: 0, stock: 4 },
-      { id: 'gemini-7d', name: 'Gemini New 7 Days Expiry Links', price: 25, stock: 10 },
-      { id: 'adobe-express', name: 'Adobe Express 12M', price: 72, stock: 8 },
-      { id: 'duolingo-super', name: 'Duolingo Super 12M', price: 156, stock: 6 },
-      { id: 'apple-music', name: 'Apple Music 5M', price: 208, stock: 12 },
+      { id: 'chatgpt-plus', name: 'ChatGPT Plus 1m', price: 0, stock: 0, icon: '🤖' },
+      { id: 'cursor-pro', name: 'Cursor Pro 1m + Grok Bot 1m', price: 0, stock: 0, icon: '💻' },
+      { id: 'gemini-pro', name: 'Gemini AI PRO 18m 2nd Service', price: 0, stock: 0, icon: '✨' },
+      { id: 'gemini-7d', name: 'Gemini New 7 Days Expiry Links', price: 25, stock: 10, icon: '✨' },
+      { id: 'adobe-express', name: 'Adobe Express 12M', price: 72, stock: 8, icon: '🎨' },
+      { id: 'duolingo-super', name: 'Duolingo Super 12M', price: 156, stock: 6, icon: '🦉' },
+      { id: 'apple-music', name: 'Apple Music 5M', price: 208, stock: 12, icon: '🎵' },
     ];
   }
 
-  const text = `🛒 Available Products\n⬇️ Choose an option to buy:`;
-  const keyboard = new InlineKeyboard();
+  const text = formatText(botConfig.shopMessage, { shop_name: botConfig.shopName });
+  const rows = [];
 
+  // Generate Product Buttons with dynamic Colors based on Stock:
+  // Stock > 0: 'success' (GREEN button)
+  // Stock <= 0: 'danger' (RED button)
   products.forEach((prod) => {
+    const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
-    keyboard.text(`${prod.name} - ${priceDisplay}`, `prod_${prod.id}`).row();
+    const icon = prod.icon || '';
+    const label = `${icon ? `${icon} ` : ''}${prod.name} - ${priceDisplay}`;
+
+    rows.push([
+      {
+        text: label,
+        callback_data: `prod_${prod.id}`,
+        // Native Telegram button styling:
+        // 'success' renders GREEN, 'danger' renders RED/BROWN!
+        style: isAvailable ? 'success' : 'danger',
+      },
+    ]);
   });
 
-  // Fixed Back to Menu button
-  keyboard.text('◀️ Back to Menu', 'back_to_menu');
+  // Fixed Back to Menu button (Blue 'primary')
+  rows.push([
+    {
+      text: '◀️ Back to Menu',
+      callback_data: 'back_to_menu',
+      style: 'primary',
+    },
+  ]);
+
+  const reply_markup = createStyledKeyboard(rows);
 
   try {
-    await ctx.editMessageText(text, { reply_markup: keyboard });
+    await ctx.editMessageText(text, { reply_markup });
   } catch (err) {
-    await ctx.reply(text, { reply_markup: keyboard });
+    await ctx.reply(text, { reply_markup });
   }
 });
 
@@ -246,7 +333,6 @@ bot.callbackQuery(/^prod_(.+)$/, async (ctx) => {
     }
   }
 
-  // Fallback if demo
   if (!product) {
     product = {
       id: prodId,
@@ -257,18 +343,26 @@ bot.callbackQuery(/^prod_(.+)$/, async (ctx) => {
     };
   }
 
-  const text = `📦 Product: *${product.name}*\n\n💰 Price: *$${product.price}*\n📊 Stock: *${product.stock > 0 ? `${product.stock} available` : 'Out of Stock'}*\n\n📝 Description:\n${product.description || 'Premium digital product with full warranty.'}\n\nClick below to confirm your purchase:`;
+  const inStock = Number(product.stock) > 0;
+  const text = `📦 Product: *${product.name}*\n\n💰 Price: *$${product.price}*\n📊 Stock: *${inStock ? `${product.stock} available` : 'Out of Stock'}*\n\n📝 Description:\n${product.description || 'Premium digital product with full warranty.'}\n\nClick below to confirm your purchase:`;
 
-  const keyboard = new InlineKeyboard();
-  if (product.stock > 0) {
-    keyboard.text('⚡ Buy Now', `buy_${product.id}`).row();
+  const rows = [];
+  if (inStock) {
+    rows.push([
+      { text: '⚡ Buy Now', callback_data: `buy_${product.id}`, style: 'success' },
+    ]);
   }
-  keyboard.text('◀️ Back to Shop', 'menu_shop').text('🏠 Main Menu', 'back_to_menu');
+  rows.push([
+    { text: '◀️ Back to Shop', callback_data: 'menu_shop', style: 'primary' },
+    { text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' },
+  ]);
+
+  const reply_markup = createStyledKeyboard(rows);
 
   try {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   } catch (e) {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
@@ -293,7 +387,7 @@ bot.callbackQuery(/^buy_(.+)$/, async (ctx) => {
     return ctx.answerCallbackQuery({ text: '❌ Product not found or unavailable!', show_alert: true });
   }
 
-  if (product.stock <= 0) {
+  if (Number(product.stock) <= 0) {
     return ctx.answerCallbackQuery({ text: '⚠️ Sorry, this item is out of stock!', show_alert: true });
   }
 
@@ -307,34 +401,32 @@ bot.callbackQuery(/^buy_(.+)$/, async (ctx) => {
     });
 
     const text = `❌ *Insufficient Balance*\n\nYou need *$${price.toFixed(2)}* to purchase *${product.name}*.\nYour current balance: *$${currentBalance.toFixed(2)}*.\n\nPlease deposit balance to proceed!`;
-    const keyboard = new InlineKeyboard()
-      .text('💰 Deposit', 'wallet_deposit')
-      .row()
-      .text('◀️ Back to Shop', 'menu_shop');
+    const reply_markup = createStyledKeyboard([
+      [{ text: '💰 Deposit', callback_data: 'wallet_deposit', style: 'success' }],
+      [{ text: '◀️ Back to Shop', callback_data: 'menu_shop', style: 'primary' }],
+    ]);
 
-    return ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    return ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   }
 
-  // Deduct balance and create order
+  // Deduct balance & create order
   const newBalance = currentBalance - price;
 
   if (db) {
     const userRef = db.collection('users').doc(String(userId));
     await userRef.update({ balance: newBalance });
 
-    // Decrement stock
     await prodRef.update({
-      stock: (product.stock || 1) - 1,
+      stock: Math.max(0, (product.stock || 1) - 1),
     });
 
-    // Create order document
     await db.collection('orders').add({
       userId: String(userId),
       userName: user.name,
       productId: product.id,
       productName: product.name,
       price: price,
-      payload: product.payload || 'Product delivered successfully via digital credentials.',
+      payload: product.payload || 'Product credentials delivered successfully.',
       status: 'completed',
       createdAt: new Date().toISOString(),
     });
@@ -344,33 +436,39 @@ bot.callbackQuery(/^buy_(.+)$/, async (ctx) => {
 
   const successText = `🎉 *Purchase Successful!*\n\nProduct: *${product.name}*\nDeducted: *$${price.toFixed(2)}*\nRemaining Balance: *$${newBalance.toFixed(2)}*\n\n🔑 *Your Product Credentials / Activation:*\n\`${product.payload || 'Account credentials sent to your inbox. Contact support if needed!'}\`\n\nThank you for choosing ${botConfig.shopName}!`;
 
-  const keyboard = new InlineKeyboard()
-    .text('🧾 Order History', 'menu_orders')
-    .text('🛒 Shop More', 'menu_shop')
-    .row()
-    .text('🏠 Main Menu', 'back_to_menu');
+  const reply_markup = createStyledKeyboard([
+    [
+      { text: '🧾 Order History', callback_data: 'menu_orders', style: 'primary' },
+      { text: '🛒 Shop More', callback_data: 'menu_shop', style: 'success' },
+    ],
+    [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  ]);
 
-  await ctx.editMessageText(successText, { parse_mode: 'Markdown', reply_markup: keyboard });
+  await ctx.editMessageText(successText, { parse_mode: 'Markdown', reply_markup });
 });
 
-// 7. Wallet Menu Handler (Matching Image 4)
+// 7. Wallet Menu Handler (Image 4)
 bot.callbackQuery('menu_wallet', async (ctx) => {
   await ctx.answerCallbackQuery();
   const userId = ctx.from.id;
   const user = await getUser(userId, ctx.from);
   const balance = Number(user.balance || 0).toFixed(2);
 
-  const text = `💲 Wallet\n\n🪙 Current Balance: $${balance}\n\n"You can add balance to your wallet and use it to purchase products directly!"`;
+  const text = formatText(botConfig.walletMessage, {
+    balance: balance,
+    shop_name: botConfig.shopName,
+    user_id: userId,
+  });
 
-  const keyboard = new InlineKeyboard()
-    .text('💰 Deposit', 'wallet_deposit')
-    .row()
-    .text('◀️ Back to Menu', 'back_to_menu');
+  const reply_markup = createStyledKeyboard([
+    [{ text: '💰 Deposit', callback_data: 'wallet_deposit', style: 'success' }], // Green button
+    [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  ]);
 
   try {
-    await ctx.editMessageText(text, { reply_markup: keyboard });
+    await ctx.editMessageText(text, { reply_markup });
   } catch (err) {
-    await ctx.reply(text, { reply_markup: keyboard });
+    await ctx.reply(text, { reply_markup });
   }
 });
 
@@ -381,16 +479,24 @@ bot.callbackQuery('wallet_deposit', async (ctx) => {
 
   const text = `💳 *Deposit Instructions*\n\nTo add balance to your wallet, send payment using any of the methods below:\n\n📱 *bKash (Personal/Send Money):*\n\`${botConfig.bkashNumber || 'Contact Support'}\`\n\n⚡ *Nagad (Personal):*\n\`${botConfig.nagadNumber || 'Contact Support'}\`\n\n💎 *Binance Pay / USDT (TRC20):*\n\`${botConfig.binancePayId || 'Contact Support'}\`\n\n━━━━━━━━━━━━━━━━━━━━\n📌 *After payment, send your Telegram ID:*\n\`${userId}\` along with your payment screenshot/TrxID to our official support agent:\n👉 [${botConfig.supportUsername}](https://t.me/${botConfig.supportUsername.replace('@', '')})\n\n⚡ Your balance will be credited to your wallet within 2-5 minutes!`;
 
-  const keyboard = new InlineKeyboard()
-    .url('📞 Contact Support to Deposit', `https://t.me/${botConfig.supportUsername.replace('@', '')}`)
-    .row()
-    .text('◀️ Back to Wallet', 'menu_wallet')
-    .text('🏠 Main Menu', 'back_to_menu');
+  const reply_markup = createStyledKeyboard([
+    [
+      {
+        text: '📞 Contact Support to Deposit',
+        url: `https://t.me/${botConfig.supportUsername.replace('@', '')}`,
+        style: 'success',
+      },
+    ],
+    [
+      { text: '◀️ Back to Wallet', callback_data: 'menu_wallet', style: 'primary' },
+      { text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' },
+    ],
+  ]);
 
   try {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   } catch (e) {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
@@ -405,12 +511,12 @@ bot.callbackQuery('menu_orders', async (ctx) => {
       const snap = await db
         .collection('orders')
         .where('userId', '==', String(userId))
-        .orderBy('createdAt', 'desc')
-        .limit(10)
         .get();
       snap.forEach((d) => orders.push(d.data()));
+      // Sort in memory by createdAt descending
+      orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     } catch (e) {
-      console.warn('Orders query failed (needs index or fallback):', e.message);
+      console.warn('Orders query failed:', e.message);
     }
   }
 
@@ -418,20 +524,20 @@ bot.callbackQuery('menu_orders', async (ctx) => {
   if (orders.length === 0) {
     text += `You have not made any purchases yet. Browse our shop to get started!`;
   } else {
-    orders.forEach((ord, idx) => {
-      text += `${idx + 1}. *${ord.productName}* - $${Number(ord.price).toFixed(2)}\n📅 ${ord.createdAt.slice(0, 10)} | Status: ${ord.status}\n\n`;
+    orders.slice(0, 10).forEach((ord, idx) => {
+      text += `${idx + 1}. *${ord.productName}* - $${Number(ord.price).toFixed(2)}\n📅 ${ord.createdAt ? ord.createdAt.slice(0, 10) : ''} | Status: ${ord.status}\n\n`;
     });
   }
 
-  const keyboard = new InlineKeyboard()
-    .text('🛒 Browse Shop', 'menu_shop')
-    .row()
-    .text('◀️ Back to Menu', 'back_to_menu');
+  const reply_markup = createStyledKeyboard([
+    [{ text: '🛒 Browse Shop', callback_data: 'menu_shop', style: 'success' }],
+    [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  ]);
 
   try {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   } catch (e) {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
@@ -443,14 +549,15 @@ bot.callbackQuery('menu_profile', async (ctx) => {
 
   const text = `🛡️ *User Profile*\n\n👤 Name: *${user.name}*\n🆔 Telegram ID: \`${userId}\`\n💰 Balance: *$${Number(user.balance || 0).toFixed(2)}*\n📅 Member Since: *${user.createdAt ? user.createdAt.slice(0, 10) : 'Active'}*`;
 
-  const keyboard = new InlineKeyboard()
-    .text('💰 Wallet', 'menu_wallet')
-    .text('◀️ Back to Menu', 'back_to_menu');
+  const reply_markup = createStyledKeyboard([
+    [{ text: '💰 Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+    [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  ]);
 
   try {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   } catch (e) {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
@@ -462,13 +569,14 @@ bot.callbackQuery('menu_refer', async (ctx) => {
 
   const text = `💸 *Refer & Earn Program*\n\nShare your referral link with friends and earn bonus wallet balance on every purchase they make!\n\n🔗 *Your Referral Link:*\n\`${refLink}\``;
 
-  const keyboard = new InlineKeyboard()
-    .text('◀️ Back to Menu', 'back_to_menu');
+  const reply_markup = createStyledKeyboard([
+    [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  ]);
 
   try {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   } catch (e) {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
@@ -477,11 +585,14 @@ bot.callbackQuery('menu_about', async (ctx) => {
   await ctx.answerCallbackQuery();
   const text = `ℹ️ *About ${botConfig.shopName}*\n\nYour trusted one-stop marketplace for digital products, AI subscriptions, streaming services, and developer tools.\n\n⚡ Automated Instant Delivery\n🛡️ 100% Replacement Warranty\n📞 24/7 Dedicated Support`;
 
-  const keyboard = new InlineKeyboard().text('◀️ Back to Menu', 'back_to_menu');
+  const reply_markup = createStyledKeyboard([
+    [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  ]);
+
   try {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   } catch (e) {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup: keyboard });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
@@ -505,6 +616,6 @@ app.listen(PORT, () => {
 // Launch Bot
 bot.start({
   onStart: (botInfo) => {
-    console.log(`🚀 NURMS Bot @${botInfo.username} is successfully running!`);
+    console.log(`🚀 NURMS Bot @${botInfo.username} is successfully running with token ${token.slice(0, 10)}...`);
   },
 });
