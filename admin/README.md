@@ -1,12 +1,12 @@
-# ⚡ DIGIX Admin Portal - Vercel Deployment Guide
+# ⚡ NURMS Admin Portal - Vercel Deployment Guide
 
-This is the Next.js (Node.js) Admin Portal for the **DIGIX Telegram Store Bot**, featuring real-time Firebase Firestore synchronization.
+This is the Next.js (Node.js) Admin Portal for the **NURMS Telegram Store Bot**, featuring real-time Firebase Firestore synchronization.
 
 ## 🚀 How to Run Locally
 
 1. Open your terminal and navigate to the admin directory:
    ```bash
-   cd digix/admin
+   cd admin
    ```
 
 2. Install dependencies:
@@ -35,8 +35,8 @@ Vercel natively supports Next.js with zero configuration:
 
 1. Push your repository to **GitHub**.
 2. Visit [Vercel Dashboard](https://vercel.com/dashboard) and click **Add New...** > **Project**.
-3. Import your GitHub repository.
-4. Set the **Root Directory** to `digix/admin`.
+3. Import your GitHub repository (`mustakim-error/nurmsbot`).
+4. Set the **Root Directory** to `admin`.
 5. Under **Environment Variables**, add the 6 variables from your `.env.local`:
    - `NEXT_PUBLIC_FIREBASE_API_KEY`
    - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`

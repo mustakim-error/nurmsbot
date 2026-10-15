@@ -4,7 +4,7 @@ import './globals.css';
 import Sidebar from '@/components/Sidebar';
 
 export const metadata: Metadata = {
-  title: 'DIGIX Admin Portal | Telegram Store & Bot Manager',
+  title: 'NURMS Admin Portal | Telegram Store & Bot Manager',
   description: 'Manage digital products, user wallets, bot channels, and orders with realtime Firebase sync.',
 };
 

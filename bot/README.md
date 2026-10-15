@@ -1,4 +1,4 @@
-# 🤖 DIGIX Telegram Bot - Deployment Guide
+# 🤖 NURMS Telegram Bot - Deployment Guide
 
 This is the automated Telegram Product Selling Bot powered by **Node.js**, **grammY**, and **Firebase Firestore Realtime Sync**.
 
@@ -6,7 +6,7 @@ This is the automated Telegram Product Selling Bot powered by **Node.js**, **gra
 
 1. Open your terminal and navigate to the bot folder:
    ```bash
-   cd digix/bot
+   cd bot
    ```
 
 2. Install dependencies:
@@ -20,11 +20,9 @@ This is the automated Telegram Product Selling Bot powered by **Node.js**, **gra
      cp .env.example .env
      ```
    - Obtain your bot token from [@BotFather](https://t.me/BotFather) on Telegram and set `BOT_TOKEN`.
-   - Download your Firebase Service Account JSON from Firebase Console:
-     - Go to `Project Settings` > `Service Accounts` > `Generate new private key`.
-     - Save it as `serviceAccountKey.json` inside this `bot/` folder.
-   - Set `CHANNEL_ID` (e.g. `@YourOfficialChannel` or `-100xxxxxxx`).
-   - **Crucial:** Add your bot as an **Administrator** in your Telegram channel so it can check membership (`can_manage_chat` or standard admin permissions)!
+   - Set `CHANNEL_ID` (e.g. `@WarzoneShop`).
+   - Set `CHANNEL_LINK` (e.g. `https://t.me/WarzoneShop`).
+   - **Crucial:** Add your bot as an **Administrator** in your Telegram channel so it can check membership!
 
 4. Start the bot:
    ```bash
@@ -41,17 +39,16 @@ Render allows you to host this bot 24/7 with zero cost:
 
 1. Push your project to GitHub.
 2. Go to [Render Dashboard](https://dashboard.render.com/) and click **New +** > **Web Service**.
-3. Connect your GitHub repository.
+3. Connect your GitHub repository (`mustakim-error/nurmsbot`).
 4. Set the following configuration:
-   - **Root Directory:** `digix/bot`
+   - **Root Directory:** `bot`
    - **Environment:** `Node`
    - **Build Command:** `npm install`
    - **Start Command:** `npm start`
 5. In **Environment Variables**, add:
-   - `BOT_TOKEN` = `your_telegram_bot_token`
-   - `CHANNEL_ID` = `@YourOfficialChannel`
-   - `CHANNEL_LINK` = `https://t.me/YourOfficialChannel`
+   - `BOT_TOKEN` = `8711373245:AAGRz0PbAJ9tzac3VVr8zg_UBrIloXCT_fg`
+   - `CHANNEL_ID` = `@WarzoneShop`
+   - `CHANNEL_LINK` = `https://t.me/WarzoneShop`
    - `SHOP_NAME` = `Warzone Shop`
-   - `SUPPORT_USERNAME` = `@YourSupportHandle`
-   - `FIREBASE_SERVICE_ACCOUNT_JSON` = *Paste the full content of your `serviceAccountKey.json` as a single line string*
+   - `SUPPORT_USERNAME` = `@mustakim_support`
 6. Click **Deploy Web Service**! Render will build and launch your bot with the included Express health check server to keep it alive 24/7.

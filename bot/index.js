@@ -492,7 +492,7 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   res.status(200).json({
     status: 'online',
-    app: 'DIGIX Telegram Bot',
+    app: 'NURMS Telegram Bot',
     shop: botConfig.shopName,
     time: new Date().toISOString(),
   });
@@ -505,6 +505,6 @@ app.listen(PORT, () => {
 // Launch Bot
 bot.start({
   onStart: (botInfo) => {
-    console.log(`🚀 DIGIX Bot @${botInfo.username} is successfully running!`);
+    console.log(`🚀 NURMS Bot @${botInfo.username} is successfully running!`);
   },
 });

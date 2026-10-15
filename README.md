@@ -1,14 +1,14 @@
-# 💎 DIGIX - Telegram Digital Store & Realtime Firebase CMS
+# 💎 NURMS - Telegram Digital Store & Realtime Firebase CMS
 
-**DIGIX** (5-letter brand name: **D-I-G-I-X**) is a complete, production-ready Telegram Digital Product Selling Bot and Admin Portal ecosystem.
+**NURMS** (5-letter brand name: **N-U-R-M-S**) is a complete, production-ready Telegram Digital Product Selling Bot and Admin Portal ecosystem.
 
 ## 🏗️ Project Architecture
 
 ```
-digix/
+nurms/
 ├── bot/                     # Telegram Bot Engine (Hosted on Render)
 │   ├── index.js             # grammY Telegram Bot with force-sub & realtime shop
-│   ├── firebase.js          # Firebase Admin SDK connector
+│   ├── firebase.js          # Firebase Client/Admin SDK connector
 │   ├── package.json
 │   ├── .env.example
 │   └── README.md            # Render deployment instructions
@@ -21,6 +21,7 @@ digix/
     │   │   ├── users/       # Manage Telegram users & top up wallet balances
     │   │   ├── orders/      # Live purchases & delivery log
     │   │   └── settings/    # Change channel link & bot configs live
+    │   ├── components/ui/   # Pure Shadcn UI components
     │   └── lib/firebase.ts  # Firebase Client SDK
     ├── package.json
     ├── .env.example

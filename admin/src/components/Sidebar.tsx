@@ -38,7 +38,7 @@ export default function Sidebar() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-bold text-base tracking-wide text-foreground">DIGIX</span>
+              <span className="font-bold text-base tracking-wide text-foreground">NURMS</span>
               <Badge variant="default" className="text-[10px] px-1.5 py-0">v1.0</Badge>
             </div>
             <p className="text-[11px] text-muted-foreground font-mono">nurms-bot • Live</p>
