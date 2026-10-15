@@ -1,0 +1,23 @@
+{
+  "name": "digix-bot",
+  "version": "1.0.0",
+  "description": "DIGIX - Premium Telegram Digital Product Selling Bot with Firebase Realtime Sync",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": ["telegram-bot", "firebase", "ecommerce", "digital-products", "grammy"],
+  "author": "Mustakim",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "firebase": "^10.11.1",
+    "firebase-admin": "^12.1.0",
+    "grammy": "^1.23.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
