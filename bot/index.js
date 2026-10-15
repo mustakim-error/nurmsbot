@@ -2,7 +2,7 @@ require('dotenv').config();
 const { Bot } = require('grammy');
 const express = require('express');
 const { rtdb } = require('./firebase');
-const { ref, get, set, update, onValue, push } = require('firebase/database');
+const { ref, get, set, update, onValue } = require('firebase/database');
 
 // Default Token embedded so Render needs zero configuration!
 const token = process.env.BOT_TOKEN || '8711373245:AAGRz0PbAJ9tzac3VVr8zg_UBrIloXCT_fg';
@@ -16,6 +16,11 @@ let botConfig = {
   channelLink: 'https://t.me/owloverdown',
   botLink: '@NurmsBOT',
   supportUsername: '@owloverdown',
+
+  // 24/7 Uptime & Cron Settings
+  selfPingUrl: '', // e.g., 'https://nurmsbot.onrender.com'
+  enableSelfPing: true,
+  pingIntervalMinutes: 10,
 
   bkashNumber: '01XXXXXXXXX',
   nagadNumber: '01XXXXXXXXX',
@@ -118,7 +123,6 @@ async function isChannelMember(ctx, userId) {
 }
 
 // Helper: Create Inline Keyboard with Native Telegram API 9.4+ button styles
-// Supported styles: 'primary' (blue), 'success' (green), 'danger' (red)
 function createStyledKeyboard(rows) {
   const inline_keyboard = rows.map((row) =>
     row.map((btn) => {
@@ -162,7 +166,7 @@ bot.command('start', async (ctx) => {
         {
           text: botConfig.verifyJoinedBtnText,
           callback_data: 'verify_joined',
-          style: 'success', // Green button in Telegram
+          style: 'success',
         },
       ],
     ]);
@@ -194,14 +198,14 @@ function renderMainMenu(ctx, user, isEdit = false) {
       { text: botConfig.btnMyOrdersText, callback_data: 'menu_orders', style: botConfig.btnMyOrdersStyle || 'primary' },
     ],
     [
-      { text: botConfig.btnReferText, callback_data: 'menu_refer', style: botConfig.btnReferStyle || 'success' }, // Green button
+      { text: botConfig.btnReferText, callback_data: 'menu_refer', style: botConfig.btnReferStyle || 'success' },
       { text: botConfig.btnProfileText, callback_data: 'menu_profile', style: botConfig.btnProfileStyle || 'primary' },
     ],
     [
       {
         text: botConfig.btnSupportText,
         url: `https://t.me/${botConfig.supportUsername.replace('@', '')}`,
-        style: botConfig.btnSupportStyle || 'success', // Green button
+        style: botConfig.btnSupportStyle || 'success',
       },
       { text: botConfig.btnAboutText, callback_data: 'menu_about', style: botConfig.btnAboutStyle || 'primary' },
     ],
@@ -260,9 +264,6 @@ bot.callbackQuery('menu_shop', async (ctx) => {
   const text = formatText(botConfig.shopMessage, { shop_name: botConfig.shopName });
   const rows = [];
 
-  // Generate Product Buttons with dynamic Colors based on Stock:
-  // Stock > 0: 'success' (GREEN button)
-  // Stock <= 0: 'danger' (RED button)
   products.forEach((prod) => {
     const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
@@ -278,7 +279,6 @@ bot.callbackQuery('menu_shop', async (ctx) => {
     ]);
   });
 
-  // Fixed Back to Menu button (Blue 'primary')
   rows.push([
     {
       text: '◀️ Back to Menu',
@@ -564,23 +564,126 @@ bot.callbackQuery('menu_about', async (ctx) => {
   }
 });
 
-// 13. Health Check HTTP Server (Essential for Render 24/7 Web Service)
+// =======================================================
+// 🌐 24/7 CRON & KEEP-ALIVE SYSTEM
+// =======================================================
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Enable CORS so the Admin Portal can ping and monitor the bot directly from the browser
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// Record start time
+const startTime = Date.now();
+
+// 1. Root Status Endpoint
 app.get('/', (req, res) => {
   res.status(200).json({
     status: 'online',
     app: 'Nurms Telegram Bot',
     shop: botConfig.shopName,
     channel: botConfig.channelId,
+    uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
     time: new Date().toISOString(),
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`🌐 Keep-alive server running on port ${PORT}`);
+// 2. Dedicated Ultra-Lightweight Cron Ping Endpoint (Ideal for Cron-job.org / UptimeRobot)
+app.get('/ping', async (req, res) => {
+  const now = new Date().toISOString();
+  console.log(`📡 [CRON PING RECEIVED] at ${now} from ${req.ip || 'external'}`);
+
+  // Record ping event in Firebase RTDB for Admin Dashboard
+  if (rtdb) {
+    try {
+      const pingRef = ref(rtdb, 'status/last_external_ping');
+      await set(pingRef, {
+        timestamp: Date.now(),
+        iso: now,
+        ip: req.ip || 'remote',
+        source: req.headers['user-agent'] || 'cron-job',
+      });
+    } catch (_) {}
+  }
+
+  res.status(200).send('pong');
 });
+
+// 3. Health & Uptime Diagnostic Endpoint
+app.get('/health', (req, res) => {
+  const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
+  res.status(200).json({
+    ok: true,
+    status: 'healthy',
+    uptime_seconds: uptimeSeconds,
+    uptime_human: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m ${uptimeSeconds % 60}s`,
+    memory: process.memoryUsage(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`🌐 24/7 Keep-alive server running on port ${PORT}`);
+});
+
+// 4. Live Heartbeat to Firebase RTDB (every 30 seconds)
+setInterval(async () => {
+  try {
+    if (rtdb) {
+      const heartbeatRef = ref(rtdb, 'status/heartbeat');
+      await set(heartbeatRef, {
+        status: 'online',
+        last_seen: new Date().toISOString(),
+        timestamp: Date.now(),
+        uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
+      });
+    }
+  } catch (err) {
+    // silent catch to avoid unhandled rejections
+  }
+}, 30000);
+
+// 5. Built-in Automated Self-Ping Cron (keeps Render 24/7 active without external cron!)
+let lastSelfPingTime = 0;
+setInterval(async () => {
+  const urlToPing = botConfig.selfPingUrl || process.env.SELF_PING_URL;
+  const enabled = botConfig.enableSelfPing !== false;
+  const intervalMinutes = Number(botConfig.pingIntervalMinutes) || 10;
+  const intervalMs = Math.max(intervalMinutes, 1) * 60 * 1000;
+
+  if (enabled && urlToPing && urlToPing.startsWith('http')) {
+    const now = Date.now();
+    if (now - lastSelfPingTime >= intervalMs) {
+      lastSelfPingTime = now;
+      try {
+        const pingEndpoint = urlToPing.replace(/\/$/, '') + '/ping';
+        const response = await fetch(pingEndpoint);
+        if (response.ok) {
+          console.log(`🔄 [SELF-PING CRON SUCCESS] Pinged ${pingEndpoint} - 24/7 Active!`);
+          if (rtdb) {
+            const selfPingRef = ref(rtdb, 'status/last_self_ping');
+            await set(selfPingRef, {
+              timestamp: now,
+              iso: new Date(now).toISOString(),
+              target: pingEndpoint,
+              status: 'success',
+            });
+          }
+        }
+      } catch (err) {
+        console.warn(`⚠️ [SELF-PING ERROR]:`, err.message);
+      }
+    }
+  }
+}, 30000); // Checks every 30 seconds to respect interval adjustments dynamically
 
 // Launch Bot
 bot.start({

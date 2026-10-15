@@ -94,12 +94,34 @@ nurms/
 - `orders/{orderId}`:
   - `userId`, `userName`, `productId`, `productName`, `price`, `payload`, `status`, `createdAt`
 
+## ⏰ 24/7 Bot Uptime & Cron System (Render Keep-Alive)
+
+Render free tier puts web services to sleep after 15 minutes of inactivity. To keep `@NurmsBOT` active 24/7/365 without paying for hosting, the bot includes a built-in keep-alive architecture:
+
+### 1. Built-in Endpoints
+- **`GET /ping`**: Ultra-fast lightweight response (`pong`), records incoming pings in Firebase RTDB (`status/last_external_ping`).
+- **`GET /health`**: Returns system uptime, process memory, and health status JSON.
+- **Heartbeat Daemon**: Updates `status/heartbeat` in Firebase RTDB every 30 seconds.
+
+### 2. Method A: Built-in Automated Self-Ping
+- Simply go to the Admin Panel &rarr; **24/7 Uptime & Cron** (or **Bot Settings** &rarr; Tab 5).
+- Enter your Render Web Service URL (e.g. `https://nurmsbot.onrender.com`).
+- Enable **Self-Ping Loop** (interval: 5-10 minutes).
+- The bot process automatically pings its own `/ping` endpoint and stays awake!
+
+### 3. Method B: External Free Cron (cron-job.org / UptimeRobot)
+- **cron-job.org**: Create a free cron job targeting `https://<your-render-url>/ping` every 5 or 10 minutes.
+- **UptimeRobot**: Add an HTTP(s) monitor pointing to `https://<your-render-url>/ping` with a 5-minute interval.
+- Free, guaranteed 100% uptime with zero downtime.
+
 ---
 
 ## ⚡ Deployment Summary
 
 | Component | Stack | Hosting Target | Cost |
 | :--- | :--- | :--- | :--- |
-| **Admin Portal** | Next.js 14, Tailwind CSS, Firebase | **Vercel** | Free |
-| **Telegram Bot** | Node.js, grammY, Express Health Server | **Render** | Free |
-| **Database** | Firebase Firestore | **Google Firebase** | Free Tier |
+| **Admin Portal** | Next.js 14, Tailwind CSS, Shadcn UI, Firebase RTDB | **Vercel** | Free |
+| **Telegram Bot** | Node.js, grammY, Express 24/7 Keep-Alive | **Render** | Free |
+| **Database** | Firebase Realtime Database (RTDB) | **Google Firebase** | Free Tier |
+| **Uptime / Cron** | Built-in Self-Ping / cron-job.org | **Render / Cron-job** | Free |
+

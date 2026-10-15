@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { 
@@ -11,22 +11,45 @@ import {
   Settings, 
   Bot, 
   Sparkles,
-  ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Activity,
+  Zap
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
+import { rtdb } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Products & Pricing', href: '/products', icon: ShoppingBag },
   { name: 'Users & Wallets', href: '/users', icon: Users },
   { name: 'Order History', href: '/orders', icon: Receipt },
+  { name: '24/7 Uptime & Cron', href: '/uptime', icon: Activity },
   { name: 'Bot Settings', href: '/settings', icon: Settings },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const [botOnline, setBotOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    try {
+      const heartbeatRef = ref(rtdb, 'status/heartbeat');
+      const unsub = onValue(heartbeatRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const val = snapshot.val();
+          const isAlive = Date.now() - (val.timestamp || 0) < 90000;
+          setBotOnline(isAlive);
+        } else {
+          setBotOnline(false);
+        }
+      });
+      return () => unsub();
+    } catch {
+      setBotOnline(false);
+    }
+  }, []);
 
   return (
     <aside className="w-64 border-r bg-card/40 backdrop-blur-xl min-h-screen flex flex-col justify-between p-4 sticky top-0 h-screen select-none">
@@ -65,7 +88,19 @@ export default function Sidebar() {
                   <Icon className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
                   {item.name}
                 </div>
-                {isActive && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+                {item.name.includes('24/7') && (
+                  <span className="flex h-2 w-2 relative">
+                    {botOnline ? (
+                      <>
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </>
+                    ) : (
+                      <span className="inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                    )}
+                  </span>
+                )}
+                {isActive && !item.name.includes('24/7') && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
               </Link>
             );
           })}
@@ -73,17 +108,20 @@ export default function Sidebar() {
       </div>
 
       {/* Footer Info & Quick Link */}
-      <div className="pt-4 border-t">
+      <div className="pt-4 border-t space-y-2">
         <div className="p-3 rounded-lg border bg-secondary/40 space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5 text-[11px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Firebase Connected
+            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+              <span className={cn(
+                "w-2 h-2 rounded-full",
+                botOnline ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-amber-500"
+              )} />
+              {botOnline === null ? 'Checking Bot...' : botOnline ? 'Bot Online 24/7' : 'Bot Idle / Standby'}
             </span>
-            <Sparkles className="w-3 h-3 text-primary" />
+            <Zap className={cn("w-3.5 h-3.5", botOnline ? "text-emerald-400" : "text-amber-400")} />
           </div>
-          <p className="text-[11px] text-muted-foreground/80 leading-relaxed">
-            Realtime sync with Telegram Bot and Firestore active.
+          <p className="text-[11px] text-muted-foreground/80 leading-relaxed font-mono">
+            {botOnline ? 'Heartbeat verified • Realtime' : 'Waiting for cron/Render ping'}
           </p>
         </div>
       </div>

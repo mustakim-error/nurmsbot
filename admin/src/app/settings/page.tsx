@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { rtdb } from '@/lib/firebase';
 import { ref, get, set, onValue } from 'firebase/database';
 import { 
@@ -13,7 +14,13 @@ import {
   Type, 
   Palette, 
   Sparkles,
-  ExternalLink
+  ExternalLink,
+  Activity,
+  Zap,
+  Clock,
+  Globe,
+  Copy,
+  Server
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -29,6 +36,11 @@ export default function SettingsPage() {
     channelLink: 'https://t.me/owloverdown',
     botLink: '@NurmsBOT',
     supportUsername: '@owloverdown',
+
+    // 24/7 Uptime & Cron
+    selfPingUrl: '',
+    enableSelfPing: true,
+    pingIntervalMinutes: 10,
 
     // Payment Numbers
     bkashNumber: '01XXXXXXXXX',
@@ -63,6 +75,9 @@ export default function SettingsPage() {
     btnAboutStyle: 'primary',
   });
 
+  const [botHeartbeat, setBotHeartbeat] = useState<any>(null);
+  const [copiedPing, setCopiedPing] = useState(false);
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -70,7 +85,7 @@ export default function SettingsPage() {
   useEffect(() => {
     const configRef = ref(rtdb, 'settings/bot_config');
     // Ultra-fast Realtime Database listener
-    const unsubscribe = onValue(configRef, (snapshot) => {
+    const unsubscribeConfig = onValue(configRef, (snapshot) => {
       if (snapshot.exists()) {
         const val = snapshot.val();
         setConfig((prev) => ({ ...prev, ...val }));
@@ -81,7 +96,18 @@ export default function SettingsPage() {
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Listen to live bot heartbeat
+    const heartbeatRef = ref(rtdb, 'status/heartbeat');
+    const unsubscribeHeartbeat = onValue(heartbeatRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setBotHeartbeat(snapshot.val());
+      }
+    });
+
+    return () => {
+      unsubscribeConfig();
+      unsubscribeHeartbeat();
+    };
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -144,7 +170,7 @@ export default function SettingsPage() {
       ) : (
         <form onSubmit={handleSave}>
           <Tabs defaultValue="channel" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 max-w-xl mb-6">
+            <TabsList className="grid w-full grid-cols-5 max-w-2xl mb-6">
               <TabsTrigger value="channel" className="gap-1.5">
                 <Bot className="w-3.5 h-3.5" />
                 Channel & Shop
@@ -160,6 +186,10 @@ export default function SettingsPage() {
               <TabsTrigger value="payments" className="gap-1.5">
                 <Wallet className="w-3.5 h-3.5" />
                 Payments
+              </TabsTrigger>
+              <TabsTrigger value="cron" className="gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                24/7 Uptime & Cron
               </TabsTrigger>
             </TabsList>
 
@@ -585,6 +615,135 @@ export default function SettingsPage() {
                       placeholder="e.g. 123456789 or T9yD14Nj9y..."
                       className="font-mono"
                     />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* TAB 5: 24/7 Uptime & Cron */}
+            <TabsContent value="cron" className="space-y-5">
+              {/* Bot Status Banner */}
+              <Card className="glass-panel border-emerald-500/20 bg-emerald-950/10">
+                <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-3 w-3 relative">
+                      {botHeartbeat?.timestamp && Date.now() - botHeartbeat.timestamp < 90000 ? (
+                        <>
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                        </>
+                      ) : (
+                        <span className="inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                      )}
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-bold text-foreground flex items-center gap-2">
+                        {botHeartbeat?.timestamp && Date.now() - botHeartbeat.timestamp < 90000
+                          ? 'Bot is Online & Active (24/7)'
+                          : 'Bot is Idle / Awaiting Ping'}
+                      </h3>
+                      <p className="text-xs text-muted-foreground font-mono">
+                        {botHeartbeat?.timestamp
+                          ? `Last Heartbeat: ${new Date(botHeartbeat.timestamp).toLocaleTimeString()} • Uptime: ${Math.floor((botHeartbeat.uptime_seconds || 0) / 3600)}h ${Math.floor(((botHeartbeat.uptime_seconds || 0) % 3600) / 60)}m`
+                          : 'Waiting for bot to start or Render service to deploy'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Link href="/uptime">
+                    <Button type="button" variant="outline" size="sm" className="gap-2 text-xs">
+                      <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                      Open Full Telemetry Dashboard
+                      <ExternalLink className="w-3 h-3 text-muted-foreground" />
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+
+              {/* Keep-Alive Configuration Card */}
+              <Card className="glass-panel">
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-primary" />
+                    Render 24/7 Keep-Alive & Self-Ping Configuration
+                  </CardTitle>
+                  <CardDescription>
+                    Render free tier sleeps after 15 minutes of inactivity. Configure the keep-alive loop so it stays awake 24/7 forever.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs">
+                  <div>
+                    <label className="block font-semibold text-foreground mb-1">
+                      Render Web Service URL (Your Bot URL)
+                    </label>
+                    <Input
+                      value={config.selfPingUrl || ''}
+                      onChange={(e) => setConfig({ ...config, selfPingUrl: e.target.value })}
+                      placeholder="https://your-bot-name.onrender.com"
+                      className="font-mono text-primary"
+                    />
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Paste the URL assigned by Render (e.g. <code>https://nurmsbot.onrender.com</code>).
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Automated Self-Ping Loop
+                      </label>
+                      <select
+                        value={config.enableSelfPing ? 'true' : 'false'}
+                        onChange={(e) => setConfig({ ...config, enableSelfPing: e.target.value === 'true' })}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="true">✅ Enabled (Keep Bot Awake 24/7)</option>
+                        <option value="false">❌ Disabled</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Self-Ping Interval
+                      </label>
+                      <select
+                        value={config.pingIntervalMinutes || 10}
+                        onChange={(e) => setConfig({ ...config, pingIntervalMinutes: Number(e.target.value) })}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="5">Every 5 Minutes (Best)</option>
+                        <option value="10">Every 10 Minutes (Recommended)</option>
+                        <option value="14">Every 14 Minutes</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Copyable Ping URL */}
+                  <div className="p-3 rounded-lg border bg-black/40 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-foreground text-[11px]">Direct Ping Endpoint (For Cron-job.org / UptimeRobot):</span>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          const base = (config.selfPingUrl || 'https://your-bot-name.onrender.com').replace(/\/$/, '');
+                          navigator.clipboard.writeText(`${base}/ping`);
+                          setCopiedPing(true);
+                          setTimeout(() => setCopiedPing(false), 2000);
+                        }}
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 text-xs gap-1.5 text-primary"
+                      >
+                        {copiedPing ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedPing ? 'Copied!' : 'Copy Ping URL'}
+                      </Button>
+                    </div>
+                    <code className="block p-2 rounded bg-black/60 font-mono text-[11px] text-emerald-400 border select-all">
+                      {((config.selfPingUrl || 'https://your-bot-name.onrender.com').replace(/\/$/, '')) + '/ping'}
+                    </code>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      💡 Setting a free cron job on <a href="https://cron-job.org" target="_blank" rel="noreferrer" className="text-primary underline">cron-job.org</a> targeting this URL every 5 or 10 minutes ensures 100% 24/7 uptime without Render ever idling.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
