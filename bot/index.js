@@ -1,27 +1,26 @@
 require('dotenv').config();
-const { Bot, InlineKeyboard } = require('grammy');
+const { Bot } = require('grammy');
 const express = require('express');
-const { db } = require('./firebase');
+const { rtdb } = require('./firebase');
+const { ref, get, set, update, onValue, push } = require('firebase/database');
 
-// Default Token embedded as requested so Render needs zero configuration!
+// Default Token embedded so Render needs zero configuration!
 const token = process.env.BOT_TOKEN || '8711373245:AAGRz0PbAJ9tzac3VVr8zg_UBrIloXCT_fg';
 
 const bot = new Bot(token);
 
-// Comprehensive Customizable Default Bot Settings
+// Default Bot Settings (Configured to user's exact channels)
 let botConfig = {
-  // Channel & Support
-  shopName: 'Warzone Shop',
-  channelId: '@WarzoneShop',
-  channelLink: 'https://t.me/WarzoneShop',
-  supportUsername: '@mustakim_support',
+  shopName: 'Nurms Shop',
+  channelId: '@owloverdown',
+  channelLink: 'https://t.me/owloverdown',
+  botLink: '@NurmsBOT',
+  supportUsername: '@owloverdown',
 
-  // Payment Numbers
   bkashNumber: '01XXXXXXXXX',
   nagadNumber: '01XXXXXXXXX',
   binancePayId: '12345678',
 
-  // Customizable Texts (A to Z editable from Admin Panel)
   forceSubMessage: '👋 Hey! {name} Please Join our Official channel to access this bot ❗',
   joinChannelBtnText: '▶️ {shop_name}',
   verifyJoinedBtnText: '✨ I Have Joined',
@@ -30,7 +29,6 @@ let botConfig = {
   shopMessage: '🛒 Available Products\n⬇️ Choose an option to buy:',
   walletMessage: '💲 Wallet\n\n🪙 Current Balance: ${balance}\n\n"You can add balance to your wallet and use it to purchase products directly!"',
 
-  // Menu Button Texts & Styles (style: 'primary' | 'success' | 'danger')
   btnShopText: '🛒 Shop',
   btnShopStyle: 'primary',
   btnWalletText: '💰 Wallet',
@@ -49,23 +47,22 @@ let botConfig = {
   btnAboutStyle: 'primary',
 };
 
-// Sync settings dynamically from Firebase Firestore in real-time
-if (db) {
+// Sync settings dynamically from Firebase Realtime Database
+if (rtdb) {
   try {
-    db.collection('settings')
-      .doc('bot_config')
-      .onSnapshot((doc) => {
-        if (doc && doc.exists) {
-          const data = doc.data();
-          botConfig = {
-            ...botConfig,
-            ...data,
-          };
-          console.log('🔄 Realtime Bot Configuration Synced from Firebase!');
-        }
-      });
+    const configRef = ref(rtdb, 'settings/bot_config');
+    onValue(configRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        botConfig = {
+          ...botConfig,
+          ...data,
+        };
+        console.log('🔄 Realtime Bot Configuration Synced from Firebase RTDB!');
+      }
+    });
   } catch (err) {
-    console.error('⚠️ Could not listen to settings collection:', err.message);
+    console.error('⚠️ Could not listen to settings in RTDB:', err.message);
   }
 }
 
@@ -79,21 +76,12 @@ function formatText(template, variables = {}) {
   return result;
 }
 
-// Helper: Get or Create User in Firebase
+// Helper: Get or Create User in Firebase RTDB
 async function getUser(userId, userInfo = {}) {
-  if (!db) {
-    return {
-      telegram_id: String(userId),
-      name: userInfo.first_name || 'User',
-      username: userInfo.username || '',
-      balance: 0.0,
-    };
-  }
+  const userRef = ref(rtdb, `users/${userId}`);
+  const snap = await get(userRef);
 
-  const userRef = db.collection('users').doc(String(userId));
-  const doc = await userRef.get();
-
-  if (!doc.exists) {
+  if (!snap.exists()) {
     const newUser = {
       telegram_id: String(userId),
       name: userInfo.first_name || 'User',
@@ -102,13 +90,13 @@ async function getUser(userId, userInfo = {}) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    await userRef.set(newUser);
+    await set(userRef, newUser);
     return newUser;
   }
 
-  const existingUser = doc.data();
+  const existingUser = snap.val();
   if (userInfo.first_name && existingUser.name !== userInfo.first_name) {
-    await userRef.update({
+    await update(userRef, {
       name: userInfo.first_name,
       username: userInfo.username || '',
       updatedAt: new Date().toISOString(),
@@ -137,7 +125,7 @@ function createStyledKeyboard(rows) {
       const buttonObj = { text: btn.text };
       if (btn.url) buttonObj.url = btn.url;
       if (btn.callback_data) buttonObj.callback_data = btn.callback_data;
-      if (btn.style) buttonObj.style = btn.style; // Telegram Bot API 9.4+ native style
+      if (btn.style) buttonObj.style = btn.style;
       return buttonObj;
     })
   );
@@ -255,28 +243,18 @@ bot.callbackQuery('menu_shop', async (ctx) => {
   await ctx.answerCallbackQuery();
 
   let products = [];
-  if (db) {
-    try {
-      const snapshot = await db.collection('products').where('active', '==', true).get();
-      snapshot.forEach((doc) => {
-        products.push({ id: doc.id, ...doc.data() });
-      });
-    } catch (err) {
-      console.error('Error fetching products:', err.message);
+  try {
+    const snap = await get(ref(rtdb, 'products'));
+    if (snap.exists()) {
+      const val = snap.val();
+      for (const [key, item] of Object.entries(val)) {
+        if (item.active !== false) {
+          products.push({ id: key, ...item });
+        }
+      }
     }
-  }
-
-  // Fallback demo products if Firestore has no products yet
-  if (products.length === 0) {
-    products = [
-      { id: 'chatgpt-plus', name: 'ChatGPT Plus 1m', price: 0, stock: 0, icon: '🤖' },
-      { id: 'cursor-pro', name: 'Cursor Pro 1m + Grok Bot 1m', price: 0, stock: 0, icon: '💻' },
-      { id: 'gemini-pro', name: 'Gemini AI PRO 18m 2nd Service', price: 0, stock: 0, icon: '✨' },
-      { id: 'gemini-7d', name: 'Gemini New 7 Days Expiry Links', price: 25, stock: 10, icon: '✨' },
-      { id: 'adobe-express', name: 'Adobe Express 12M', price: 72, stock: 8, icon: '🎨' },
-      { id: 'duolingo-super', name: 'Duolingo Super 12M', price: 156, stock: 6, icon: '🦉' },
-      { id: 'apple-music', name: 'Apple Music 5M', price: 208, stock: 12, icon: '🎵' },
-    ];
+  } catch (err) {
+    console.error('Error fetching products from RTDB:', err.message);
   }
 
   const text = formatText(botConfig.shopMessage, { shop_name: botConfig.shopName });
@@ -295,8 +273,6 @@ bot.callbackQuery('menu_shop', async (ctx) => {
       {
         text: label,
         callback_data: `prod_${prod.id}`,
-        // Native Telegram button styling:
-        // 'success' renders GREEN, 'danger' renders RED/BROWN!
         style: isAvailable ? 'success' : 'danger',
       },
     ]);
@@ -326,11 +302,9 @@ bot.callbackQuery(/^prod_(.+)$/, async (ctx) => {
   const prodId = ctx.match[1];
 
   let product = null;
-  if (db) {
-    const doc = await db.collection('products').doc(prodId).get();
-    if (doc.exists) {
-      product = { id: doc.id, ...doc.data() };
-    }
+  const snap = await get(ref(rtdb, `products/${prodId}`));
+  if (snap.exists()) {
+    product = { id: prodId, ...snap.val() };
   }
 
   if (!product) {
@@ -373,14 +347,9 @@ bot.callbackQuery(/^buy_(.+)$/, async (ctx) => {
   const user = await getUser(userId, ctx.from);
 
   let product = null;
-  let prodRef = null;
-
-  if (db) {
-    prodRef = db.collection('products').doc(prodId);
-    const doc = await prodRef.get();
-    if (doc.exists) {
-      product = { id: doc.id, ...doc.data() };
-    }
+  const prodSnap = await get(ref(rtdb, `products/${prodId}`));
+  if (prodSnap.exists()) {
+    product = { id: prodId, ...prodSnap.val() };
   }
 
   if (!product) {
@@ -409,28 +378,26 @@ bot.callbackQuery(/^buy_(.+)$/, async (ctx) => {
     return ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   }
 
-  // Deduct balance & create order
+  // Deduct balance & create order in RTDB
   const newBalance = currentBalance - price;
 
-  if (db) {
-    const userRef = db.collection('users').doc(String(userId));
-    await userRef.update({ balance: newBalance });
+  await update(ref(rtdb, `users/${userId}`), { balance: newBalance });
+  await update(ref(rtdb, `products/${prodId}`), {
+    stock: Math.max(0, (product.stock || 1) - 1),
+  });
 
-    await prodRef.update({
-      stock: Math.max(0, (product.stock || 1) - 1),
-    });
-
-    await db.collection('orders').add({
-      userId: String(userId),
-      userName: user.name,
-      productId: product.id,
-      productName: product.name,
-      price: price,
-      payload: product.payload || 'Product credentials delivered successfully.',
-      status: 'completed',
-      createdAt: new Date().toISOString(),
-    });
-  }
+  const orderId = `order_${Date.now()}`;
+  await set(ref(rtdb, `orders/${orderId}`), {
+    id: orderId,
+    userId: String(userId),
+    userName: user.name,
+    productId: product.id,
+    productName: product.name,
+    price: price,
+    payload: product.payload || 'Product credentials delivered successfully.',
+    status: 'completed',
+    createdAt: new Date().toISOString(),
+  });
 
   await ctx.answerCallbackQuery({ text: '🎉 Purchase successful!' });
 
@@ -461,7 +428,7 @@ bot.callbackQuery('menu_wallet', async (ctx) => {
   });
 
   const reply_markup = createStyledKeyboard([
-    [{ text: '💰 Deposit', callback_data: 'wallet_deposit', style: 'success' }], // Green button
+    [{ text: '💰 Deposit', callback_data: 'wallet_deposit', style: 'success' }],
     [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
   ]);
 
@@ -506,18 +473,19 @@ bot.callbackQuery('menu_orders', async (ctx) => {
   const userId = ctx.from.id;
 
   let orders = [];
-  if (db) {
-    try {
-      const snap = await db
-        .collection('orders')
-        .where('userId', '==', String(userId))
-        .get();
-      snap.forEach((d) => orders.push(d.data()));
-      // Sort in memory by createdAt descending
+  try {
+    const snap = await get(ref(rtdb, 'orders'));
+    if (snap.exists()) {
+      const val = snap.val();
+      for (const [key, item] of Object.entries(val)) {
+        if (item.userId === String(userId)) {
+          orders.push(item);
+        }
+      }
       orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    } catch (e) {
-      console.warn('Orders query failed:', e.message);
     }
+  } catch (e) {
+    console.warn('Orders query failed in RTDB:', e.message);
   }
 
   let text = `🧾 *Your Recent Orders*\n\n`;
@@ -603,8 +571,9 @@ const PORT = process.env.PORT || 3000;
 app.get('/', (req, res) => {
   res.status(200).json({
     status: 'online',
-    app: 'NURMS Telegram Bot',
+    app: 'Nurms Telegram Bot',
     shop: botConfig.shopName,
+    channel: botConfig.channelId,
     time: new Date().toISOString(),
   });
 });
@@ -616,6 +585,6 @@ app.listen(PORT, () => {
 // Launch Bot
 bot.start({
   onStart: (botInfo) => {
-    console.log(`🚀 NURMS Bot @${botInfo.username} is successfully running with token ${token.slice(0, 10)}...`);
+    console.log(`🚀 Nurms Bot @${botInfo.username} is successfully running with token ${token.slice(0, 10)}...`);
   },
 });

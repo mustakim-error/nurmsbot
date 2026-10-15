@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { Receipt, Search, CheckCircle2, Clock, Copy, Check } from 'lucide-react';
+import { rtdb } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
+import { Receipt, Search, CheckCircle2, Clock, Copy, Check, RadioTower } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -28,13 +28,20 @@ export default function OrdersPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snapshot) => {
+    const ordersRef = ref(rtdb, 'orders');
+    const unsub = onValue(ordersRef, (snapshot) => {
       const list: Order[] = [];
-      snapshot.forEach((d) => {
-        list.push({ id: d.id, ...(d.data() as any) });
-      });
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        for (const [key, item] of Object.entries(val)) {
+          list.push({ id: key, ...(item as any) });
+        }
+        list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
       setOrders(list);
+      setLoading(false);
+    }, (err) => {
+      console.error('Orders load error:', err);
       setLoading(false);
     });
 
@@ -82,8 +89,9 @@ export default function OrdersPage() {
       {/* Orders Table Card */}
       <Card className="glass-panel overflow-hidden border">
         {loading ? (
-          <div className="p-12 text-center text-muted-foreground text-xs">
-            Fetching order history from Firebase...
+          <div className="p-12 text-center text-muted-foreground text-xs flex items-center justify-center gap-2">
+            <RadioTower className="w-4 h-4 animate-spin text-primary" />
+            Fetching order history from Realtime Database...
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="p-16 text-center space-y-3">

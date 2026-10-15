@@ -1,15 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { 
-  collection, 
-  onSnapshot, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc 
-} from 'firebase/firestore';
+import { rtdb } from '@/lib/firebase';
+import { ref, onValue, set, remove, push } from 'firebase/database';
 import { 
   Plus, 
   Trash2, 
@@ -19,7 +12,8 @@ import {
   KeyRound, 
   Search,
   CheckCircle2,
-  XCircle
+  XCircle,
+  RadioTower
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -65,12 +59,19 @@ export default function ProductsPage() {
   });
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'products'), (snapshot) => {
+    const prodsRef = ref(rtdb, 'products');
+    const unsub = onValue(prodsRef, (snapshot) => {
       const prods: Product[] = [];
-      snapshot.forEach((d) => {
-        prods.push({ id: d.id, ...(d.data() as any) });
-      });
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        for (const [key, item] of Object.entries(val)) {
+          prods.push({ id: key, ...(item as any) });
+        }
+      }
       setProducts(prods);
+      setLoading(false);
+    }, (error) => {
+      console.error('Products load error:', error);
       setLoading(false);
     });
 
@@ -110,30 +111,19 @@ export default function ProductsPage() {
     if (!formData.name) return;
 
     try {
-      if (editingProduct) {
-        await updateDoc(doc(db, 'products', editingProduct.id), {
-          name: formData.name,
-          price: Number(formData.price),
-          stock: Number(formData.stock),
-          icon: formData.icon || '✨',
-          description: formData.description,
-          payload: formData.payload,
-          active: formData.active,
-          updatedAt: new Date().toISOString(),
-        });
-      } else {
-        await addDoc(collection(db, 'products'), {
-          name: formData.name,
-          price: Number(formData.price),
-          stock: Number(formData.stock),
-          icon: formData.icon || '✨',
-          description: formData.description,
-          payload: formData.payload,
-          active: formData.active,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        });
-      }
+      const id = editingProduct ? editingProduct.id : `prod_${Date.now()}`;
+      const prodRef = ref(rtdb, `products/${id}`);
+      await set(prodRef, {
+        id: id,
+        name: formData.name,
+        price: Number(formData.price),
+        stock: Number(formData.stock),
+        icon: formData.icon || '✨',
+        description: formData.description,
+        payload: formData.payload,
+        active: formData.active,
+        updatedAt: new Date().toISOString(),
+      });
       setIsDialogOpen(false);
     } catch (err: any) {
       alert(`Error saving product: ${err.message}`);
@@ -142,34 +132,7 @@ export default function ProductsPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this product?')) {
-      await deleteDoc(doc(db, 'products', id));
-    }
-  };
-
-  // 1-Click seed with user's exact screenshot products!
-  const handleSeedProducts = async () => {
-    const demoItems = [
-      { name: 'ChatGPT Plus 1m', price: 0, stock: 15, payload: 'Account: chatgpt-user-01@gmail.com | pass: PlusPass99' },
-      { name: 'Cursor Pro 1m + Grok Bot 1m', price: 0, stock: 10, payload: 'Cursor Key: cr_tok_9918231 | Grok invite attached' },
-      { name: 'Gemini AI PRO 18m 2nd Service', price: 0, stock: 12, payload: 'Gemini Workspace Invitation Link sent' },
-      { name: 'Gemini New 7 Days Expiry Links', price: 25, stock: 25, payload: 'https://one.google.com/explore-plan/gemini-advanced-claim-demo' },
-      { name: 'Adobe Express 12M', price: 72, stock: 8, payload: 'Adobe Team Invite sent to your registered email' },
-      { name: 'Duolingo Super 12M', price: 156, stock: 14, payload: 'Duolingo Family Group Slot Link: https://invite.duolingo.com/family-slot' },
-      { name: 'Apple Music 5M', price: 208, stock: 10, payload: 'Apple Music Family Invitation link' },
-    ];
-
-    try {
-      for (const item of demoItems) {
-        await addDoc(collection(db, 'products'), {
-          ...item,
-          description: 'Instant automated digital activation with replacement warranty.',
-          active: true,
-          createdAt: new Date().toISOString(),
-        });
-      }
-      alert('🎉 7 Screenshot products added to Firebase Firestore successfully!');
-    } catch (err: any) {
-      alert(`Error seeding products: ${err.message}`);
+      await remove(ref(rtdb, `products/${id}`));
     }
   };
 
@@ -192,18 +155,6 @@ export default function ProductsPage() {
         </div>
 
         <div className="flex items-center gap-2">
-          {products.length === 0 && (
-            <Button
-              onClick={handleSeedProducts}
-              variant="outline"
-              size="sm"
-              className="gap-1.5 text-xs border-amber-500/30 text-amber-300 hover:bg-amber-500/10"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              1-Click Populate Screenshot Items
-            </Button>
-          )}
-
           <Button onClick={handleOpenAdd} size="sm" className="gap-1.5 font-semibold">
             <Plus className="w-4 h-4" />
             Add New Product
@@ -230,8 +181,9 @@ export default function ProductsPage() {
       {/* Products Table Card */}
       <Card className="glass-panel overflow-hidden border">
         {loading ? (
-          <div className="p-12 text-center text-muted-foreground text-xs">
-            Connecting to Firebase Firestore...
+          <div className="p-12 text-center text-muted-foreground text-xs flex items-center justify-center gap-2">
+            <RadioTower className="w-4 h-4 animate-spin text-primary" />
+            Loading products from Realtime Database...
           </div>
         ) : filteredProducts.length === 0 ? (
           <div className="p-16 text-center space-y-3">
@@ -240,7 +192,7 @@ export default function ProductsPage() {
             </div>
             <p className="text-sm font-semibold text-foreground">No digital products found</p>
             <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Click "Add New Product" or use "1-Click Populate Screenshot Items" to add your digital inventory.
+              Click "Add New Product" to add your digital inventory.
             </p>
           </div>
         ) : (
@@ -269,7 +221,7 @@ export default function ProductsPage() {
                       <div className="text-xs text-muted-foreground line-clamp-1">{p.description}</div>
                     </TableCell>
                     <TableCell className="font-mono font-bold text-primary">
-                      {p.price === 0 ? 'Free ($0)' : `$${Number(p.price).toFixed(2)}`}
+                      {Number(p.price) === 0 ? 'Free ($0)' : `$${Number(p.price).toFixed(2)}`}
                     </TableCell>
                     <TableCell className="font-mono">
                       <Badge variant={inStock ? "secondary" : "destructive"} className="text-[11px]">

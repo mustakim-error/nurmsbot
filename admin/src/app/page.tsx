@@ -2,8 +2,8 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
+import { rtdb } from '@/lib/firebase';
+import { ref, onValue } from 'firebase/database';
 import { 
   Users, 
   ShoppingBag, 
@@ -14,8 +14,7 @@ import {
   PlusCircle, 
   Radio,
   ExternalLink,
-  ShieldCheck,
-  Zap
+  RadioTower
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,44 +30,57 @@ export default function DashboardPage() {
   });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const [botConfig, setBotConfig] = useState<any>({
-    shopName: 'Warzone Shop',
-    channelId: '@WarzoneShop',
+    shopName: 'Nurms Shop',
+    channelId: '@owloverdown',
   });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // 1. Listen to Users
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
-      setStats((prev) => ({ ...prev, totalUsers: snapshot.size }));
+    const usersRef = ref(rtdb, 'users');
+    const unsubUsers = onValue(usersRef, (snapshot) => {
+      let count = 0;
+      if (snapshot.exists()) {
+        count = Object.keys(snapshot.val()).length;
+      }
+      setStats((prev) => ({ ...prev, totalUsers: count }));
     });
 
     // 2. Listen to Products
-    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
-      setStats((prev) => ({ ...prev, totalProducts: snapshot.size }));
+    const prodsRef = ref(rtdb, 'products');
+    const unsubProducts = onValue(prodsRef, (snapshot) => {
+      let count = 0;
+      if (snapshot.exists()) {
+        count = Object.keys(snapshot.val()).length;
+      }
+      setStats((prev) => ({ ...prev, totalProducts: count }));
     });
 
     // 3. Listen to Orders
-    const ordersQuery = query(collection(db, 'orders'), orderBy('createdAt', 'desc'), limit(5));
-    const unsubOrders = onSnapshot(ordersQuery, (snapshot) => {
+    const ordersRef = ref(rtdb, 'orders');
+    const unsubOrders = onValue(ordersRef, (snapshot) => {
       let revenue = 0;
       const ordersList: any[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        ordersList.push({ id: doc.id, ...data });
-        revenue += Number(data.price || 0);
-      });
-      setStats((prev) => ({ ...prev, totalOrders: snapshot.size, totalRevenue: revenue }));
-      setRecentOrders(ordersList);
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        for (const [key, item] of Object.entries(val)) {
+          const order = item as any;
+          ordersList.push({ id: key, ...order });
+          revenue += Number(order.price || 0);
+        }
+        ordersList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
+      setStats((prev) => ({ ...prev, totalOrders: ordersList.length, totalRevenue: revenue }));
+      setRecentOrders(ordersList.slice(0, 5));
       setLoading(false);
     });
 
     // 4. Listen to Bot Config
-    const unsubConfig = onSnapshot(collection(db, 'settings'), (snapshot) => {
-      snapshot.forEach((doc) => {
-        if (doc.id === 'bot_config') {
-          setBotConfig(doc.data());
-        }
-      });
+    const configRef = ref(rtdb, 'settings/bot_config');
+    const unsubConfig = onValue(configRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setBotConfig(snapshot.val());
+      }
     });
 
     return () => {
@@ -88,11 +100,11 @@ export default function DashboardPage() {
             <h1 className="text-xl font-bold tracking-tight text-white">Dashboard Overview</h1>
             <Badge variant="success" className="gap-1.5 py-0 px-2 font-mono">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              Live Sync
+              Live Sync (RTDB)
             </Badge>
           </div>
           <p className="text-xs text-muted-foreground">
-            Storefront: <b className="text-foreground">{botConfig.shopName}</b> · Channel: <code className="text-primary font-mono">{botConfig.channelId}</code>
+            Storefront: <b className="text-foreground">{botConfig.shopName || 'Nurms Shop'}</b> · Channel: <code className="text-primary font-mono">{botConfig.channelId || '@owloverdown'}</code>
           </p>
         </div>
 
@@ -112,7 +124,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Metric Cards Grid with Shadcn Card */}
+      {/* Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1 */}
         <Card className="glass-card">
@@ -197,7 +209,7 @@ export default function DashboardPage() {
 
       {/* Main Grid: Orders & Bot Info */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Orders List with Shadcn Card & Table */}
+        {/* Recent Orders List */}
         <Card className="lg:col-span-2 glass-panel">
           <CardHeader className="flex flex-row items-center justify-between pb-4">
             <div>
@@ -265,15 +277,15 @@ export default function DashboardPage() {
             <div className="p-3 rounded-lg border bg-secondary/50 space-y-2">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Force Join:</span>
-                <span className="font-mono text-primary font-semibold">{botConfig.channelId}</span>
+                <span className="font-mono text-primary font-semibold">{botConfig.channelId || '@owloverdown'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Store Name:</span>
-                <span className="text-foreground font-medium">{botConfig.shopName}</span>
+                <span className="text-foreground font-medium">{botConfig.shopName || 'Nurms Shop'}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Firebase Project:</span>
-                <span className="text-muted-foreground font-mono">nurms-bot</span>
+                <span className="text-muted-foreground">Firebase Engine:</span>
+                <span className="text-primary font-mono">Realtime Database</span>
               </div>
             </div>
 

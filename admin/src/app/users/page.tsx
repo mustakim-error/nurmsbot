@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
-import { Users, DollarSign, Wallet, Search, ArrowUpRight, Plus, Minus, UserCheck } from 'lucide-react';
+import { rtdb } from '@/lib/firebase';
+import { ref, onValue, update } from 'firebase/database';
+import { Users, DollarSign, Wallet, Search, ArrowUpRight, Plus, Minus, UserCheck, RadioTower } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,12 +34,19 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'users'), (snapshot) => {
+    const usersRef = ref(rtdb, 'users');
+    const unsub = onValue(usersRef, (snapshot) => {
       const list: TelegramUser[] = [];
-      snapshot.forEach((d) => {
-        list.push({ telegram_id: d.id, ...(d.data() as any) });
-      });
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        for (const [key, item] of Object.entries(val)) {
+          list.push({ telegram_id: key, ...(item as any) });
+        }
+      }
       setUsers(list);
+      setLoading(false);
+    }, (err) => {
+      console.error('Users load error:', err);
       setLoading(false);
     });
 
@@ -53,7 +60,8 @@ export default function UsersPage() {
     const newBalance = isAdd ? current + amount : Math.max(0, current - amount);
 
     try {
-      await updateDoc(doc(db, 'users', selectedUser.telegram_id), {
+      const userRef = ref(rtdb, `users/${selectedUser.telegram_id}`);
+      await update(userRef, {
         balance: newBalance,
         updatedAt: new Date().toISOString(),
       });
@@ -98,7 +106,8 @@ export default function UsersPage() {
       {/* Users Table Card */}
       <Card className="glass-panel overflow-hidden border">
         {loading ? (
-          <div className="p-12 text-center text-muted-foreground text-xs">
+          <div className="p-12 text-center text-muted-foreground text-xs flex items-center justify-center gap-2">
+            <RadioTower className="w-4 h-4 animate-spin text-primary" />
             Loading user database from Firebase...
           </div>
         ) : filteredUsers.length === 0 ? (

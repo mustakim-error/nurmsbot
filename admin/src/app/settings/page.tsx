@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { db } from '@/lib/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { rtdb } from '@/lib/firebase';
+import { ref, get, set, onValue } from 'firebase/database';
 import { 
   Settings, 
   Save, 
@@ -13,7 +13,6 @@ import {
   Type, 
   Palette, 
   Sparkles,
-  HelpCircle,
   ExternalLink
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -24,11 +23,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 export default function SettingsPage() {
   const [config, setConfig] = useState({
-    // Store & Channel
-    shopName: 'Warzone Shop',
-    channelId: '@WarzoneShop',
-    channelLink: 'https://t.me/WarzoneShop',
-    supportUsername: '@mustakim_support',
+    // Store & Channel (Defaults requested by user)
+    shopName: 'Nurms Shop',
+    channelId: '@owloverdown',
+    channelLink: 'https://t.me/owloverdown',
+    botLink: '@NurmsBOT',
+    supportUsername: '@owloverdown',
 
     // Payment Numbers
     bkashNumber: '01XXXXXXXXX',
@@ -64,29 +64,32 @@ export default function SettingsPage() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    async function loadConfig() {
-      try {
-        const docRef = doc(db, 'settings', 'bot_config');
-        const snap = await getDoc(docRef);
-        if (snap.exists()) {
-          setConfig((prev) => ({ ...prev, ...(snap.data() as any) }));
-        }
-      } catch (err) {
-        console.error('Failed to load settings:', err);
-      } finally {
-        setLoading(false);
+    const configRef = ref(rtdb, 'settings/bot_config');
+    // Ultra-fast Realtime Database listener
+    const unsubscribe = onValue(configRef, (snapshot) => {
+      if (snapshot.exists()) {
+        const val = snapshot.val();
+        setConfig((prev) => ({ ...prev, ...val }));
       }
-    }
-    loadConfig();
+      setLoading(false);
+    }, (error) => {
+      console.error('RTDB Load Error:', error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSaving(true);
     try {
-      await setDoc(doc(db, 'settings', 'bot_config'), {
+      const configRef = ref(rtdb, 'settings/bot_config');
+      await set(configRef, {
         ...config,
         updatedAt: new Date().toISOString(),
       });
@@ -94,6 +97,8 @@ export default function SettingsPage() {
       setTimeout(() => setSaved(false), 3000);
     } catch (err: any) {
       alert(`Error updating settings: ${err.message}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -113,7 +118,7 @@ export default function SettingsPage() {
             Full Bot & Appearance Studio
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Customize everything from bot greetings, button texts, channel force-sub, to button colors in <b>realtime</b> via Firebase.
+            Super fast real-time sync via Firebase Realtime Database. All changes reflect in the bot in milliseconds.
           </p>
         </div>
 
@@ -121,24 +126,29 @@ export default function SettingsPage() {
           {saved && (
             <Badge variant="success" className="gap-1.5 py-1 px-3">
               <Check className="w-3.5 h-3.5 text-emerald-400" />
-              Saved & Synced Live!
+              Saved Instantly to Firebase!
             </Badge>
           )}
-          <Button onClick={handleSave} size="sm" className="gap-2 font-semibold">
+          <Button onClick={handleSave} disabled={saving} size="sm" className="gap-2 font-semibold">
             <Save className="w-4 h-4" />
-            Save All Changes
+            {saving ? 'Saving...' : 'Save All Changes'}
           </Button>
         </div>
       </div>
 
       {loading ? (
-        <div className="p-16 text-center text-muted-foreground text-xs">
-          Connecting to Firebase Firestore...
+        <div className="p-16 text-center text-muted-foreground text-xs flex items-center justify-center gap-2">
+          <RadioTower className="w-4 h-4 animate-spin text-primary" />
+          Loading settings from Firebase...
         </div>
       ) : (
         <form onSubmit={handleSave}>
-          <Tabs defaultValue="texts" className="w-full">
+          <Tabs defaultValue="channel" className="w-full">
             <TabsList className="grid w-full grid-cols-4 max-w-xl mb-6">
+              <TabsTrigger value="channel" className="gap-1.5">
+                <Bot className="w-3.5 h-3.5" />
+                Channel & Shop
+              </TabsTrigger>
               <TabsTrigger value="texts" className="gap-1.5">
                 <Type className="w-3.5 h-3.5" />
                 Messages (A-Z)
@@ -147,23 +157,100 @@ export default function SettingsPage() {
                 <Palette className="w-3.5 h-3.5" />
                 Buttons & Colors
               </TabsTrigger>
-              <TabsTrigger value="channel" className="gap-1.5">
-                <Bot className="w-3.5 h-3.5" />
-                Channel & Shop
-              </TabsTrigger>
               <TabsTrigger value="payments" className="gap-1.5">
                 <Wallet className="w-3.5 h-3.5" />
                 Payments
               </TabsTrigger>
             </TabsList>
 
-            {/* TAB 1: Bot Messages (A to Z Editor) */}
+            {/* TAB 1: Channel & Shop */}
+            <TabsContent value="channel" className="space-y-5">
+              <Card className="glass-panel">
+                <CardHeader>
+                  <CardTitle className="text-sm">Official Telegram Channel & Identity</CardTitle>
+                  <CardDescription>Configure mandatory channel force-join & customer support</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Shop Brand Name
+                      </label>
+                      <Input
+                        required
+                        value={config.shopName}
+                        onChange={(e) => setConfig({ ...config, shopName: e.target.value })}
+                        placeholder="Nurms Shop"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Bot Username / Link
+                      </label>
+                      <Input
+                        required
+                        value={config.botLink}
+                        onChange={(e) => setConfig({ ...config, botLink: e.target.value })}
+                        placeholder="@NurmsBOT"
+                        className="font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Force-Join Telegram Channel Username
+                      </label>
+                      <Input
+                        required
+                        value={config.channelId}
+                        onChange={(e) => setConfig({ ...config, channelId: e.target.value })}
+                        placeholder="@owloverdown"
+                        className="font-mono text-primary font-bold"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        ⚠️ Ensure your bot is an <b>Administrator</b> in this channel!
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Official Channel Link
+                      </label>
+                      <Input
+                        required
+                        value={config.channelLink}
+                        onChange={(e) => setConfig({ ...config, channelLink: e.target.value })}
+                        placeholder="https://t.me/owloverdown"
+                        className="font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-foreground mb-1">
+                      Support Agent Username
+                    </label>
+                    <Input
+                      required
+                      value={config.supportUsername}
+                      onChange={(e) => setConfig({ ...config, supportUsername: e.target.value })}
+                      placeholder="@owloverdown"
+                      className="font-mono"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* TAB 2: Bot Messages (A to Z Editor) */}
             <TabsContent value="texts" className="space-y-5">
               <Card className="glass-panel">
                 <CardHeader>
                   <CardTitle className="text-sm">Welcome & Screen Greetings</CardTitle>
                   <CardDescription>
-                    Available dynamic tags: <code className="text-primary font-mono font-bold">{"{name}"}</code> (User name), <code className="text-primary font-mono font-bold">{"{shop_name}"}</code>, <code className="text-primary font-mono font-bold">{"{user_id}"}</code>, <code className="text-primary font-mono font-bold">{"{balance}"}</code>.
+                    Available dynamic tags: <code className="text-primary font-mono font-bold">{"{name}"}</code>, <code className="text-primary font-mono font-bold">{"{shop_name}"}</code>, <code className="text-primary font-mono font-bold">{"{user_id}"}</code>, <code className="text-primary font-mono font-bold">{"{balance}"}</code>.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 text-xs">
@@ -243,7 +330,7 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-            {/* TAB 2: Buttons & Colors */}
+            {/* TAB 3: Buttons & Colors */}
             <TabsContent value="buttons" className="space-y-5">
               <Card className="glass-panel">
                 <CardHeader>
@@ -255,7 +342,6 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 text-xs">
-                  {/* Button Grid Config */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {/* Row 1 */}
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
@@ -454,74 +540,6 @@ export default function SettingsPage() {
               </Card>
             </TabsContent>
 
-            {/* TAB 3: Channel & Shop */}
-            <TabsContent value="channel" className="space-y-5">
-              <Card className="glass-panel">
-                <CardHeader>
-                  <CardTitle className="text-sm">Official Telegram Channel & Identity</CardTitle>
-                  <CardDescription>Configure mandatory channel force-join & customer support</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-xs">
-                  <div>
-                    <label className="block font-semibold text-foreground mb-1">
-                      Shop Brand Name
-                    </label>
-                    <Input
-                      required
-                      value={config.shopName}
-                      onChange={(e) => setConfig({ ...config, shopName: e.target.value })}
-                      placeholder="Warzone Shop"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-semibold text-foreground mb-1">
-                        Force-Join Telegram Channel Username or ID
-                      </label>
-                      <Input
-                        required
-                        value={config.channelId}
-                        onChange={(e) => setConfig({ ...config, channelId: e.target.value })}
-                        placeholder="@WarzoneShop or -100xxxxxxx"
-                        className="font-mono"
-                      />
-                      <p className="text-[11px] text-muted-foreground mt-1">
-                        ⚠️ Ensure your bot is an <b>Administrator</b> in this channel!
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block font-semibold text-foreground mb-1">
-                        Official Channel Link
-                      </label>
-                      <Input
-                        required
-                        type="url"
-                        value={config.channelLink}
-                        onChange={(e) => setConfig({ ...config, channelLink: e.target.value })}
-                        placeholder="https://t.me/WarzoneShop"
-                        className="font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-foreground mb-1">
-                      Support Agent Username
-                    </label>
-                    <Input
-                      required
-                      value={config.supportUsername}
-                      onChange={(e) => setConfig({ ...config, supportUsername: e.target.value })}
-                      placeholder="@mustakim_support"
-                      className="font-mono"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
             {/* TAB 4: Payment Numbers */}
             <TabsContent value="payments" className="space-y-5">
               <Card className="glass-panel">
@@ -576,12 +594,12 @@ export default function SettingsPage() {
             <div className="pt-4 flex items-center justify-between">
               <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-mono">
                 <RadioTower className="w-4 h-4 text-primary animate-pulse" />
-                Firebase Realtime Listener Active
+                Firebase Realtime Database Active
               </span>
 
-              <Button type="submit" size="sm" className="gap-2 font-semibold">
+              <Button type="submit" disabled={saving} size="sm" className="gap-2 font-semibold">
                 <Save className="w-4 h-4" />
-                Save All Changes
+                {saving ? 'Saving...' : 'Save All Changes'}
               </Button>
             </div>
           </Tabs>
