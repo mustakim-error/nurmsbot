@@ -1,0 +1,13 @@
+{
+  "name": "nurms-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NURMS Monorepo Root",
+  "scripts": {
+    "dev": "npm --prefix admin run dev",
+    "admin": "npm --prefix admin run dev",
+    "bot": "npm --prefix bot start",
+    "dev:bot": "npm --prefix bot run dev",
+    "install:all": "npm --prefix admin install && npm --prefix bot install"
+  }
+}
