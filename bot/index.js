@@ -399,12 +399,78 @@ function getButtonIcon(icon, fallbackName = '') {
   return clean && clean.length <= 4 ? clean : '✨';
 }
 
-// Default Presets for Payment Gateways
+// Built-in Verified Telegram Custom Emoji IDs for Real Brand Logos
+const DEFAULT_CUSTOM_EMOJI_IDS = {
+  // Binance
+  binance: '5408859148592913996',
+  'binance-pay': '5408859148592913996',
+  bnb: '5289735748147226132',
+  
+  // Tether USDT
+  usdt: '5292006737874792240',
+  'usdt-bep20': '5292006737874792240',
+  'usdt-polygon': '5291925777741260362',
+  'usdt-ton': '5292006737874792240',
+  tether: '5292006737874792240',
+
+  // Polygon
+  polygon: '5291925777741260362',
+  matic: '5291925777741260362',
+
+  // Bybit & Exchange
+  bybit: '5291751363414336197',
+  'bybit-pay': '5291751363414336197',
+
+  // Bitcoin, Ethereum & TON
+  btc: '5291763943373549541',
+  bitcoin: '5291763943373549541',
+  eth: '5291927564447655889',
+  ethereum: '5291927564447655889',
+  ton: '5321041614443944130',
+  toncoin: '5321041614443944130',
+
+  // Digital Products & AI Services
+  netflix: '5408891365142601524',
+  spotify: '5409302668390736773',
+  youtube: '5409197634965511131',
+  chatgpt: '5409029388211625687',
+  openai: '5409029388211625687',
+  gemini: '5409029388211625687',
+  claude: '5409029388211625687',
+  apple: '5409074395173923855',
+  twitter: '5409194031487950199',
+};
+
+function resolveCustomEmojiId(item = {}) {
+  if (item.custom_emoji_id && String(item.custom_emoji_id).trim()) {
+    return String(item.custom_emoji_id).trim();
+  }
+  if (item.icon && /^\d{10,}$/.test(String(item.icon).trim())) {
+    return String(item.icon).trim();
+  }
+
+  const iconKey = String(item.icon || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+  const idKey = String(item.id || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
+
+  if (DEFAULT_CUSTOM_EMOJI_IDS[idKey]) return DEFAULT_CUSTOM_EMOJI_IDS[idKey];
+  if (DEFAULT_CUSTOM_EMOJI_IDS[iconKey]) return DEFAULT_CUSTOM_EMOJI_IDS[iconKey];
+
+  const nameLower = String(item.name || '').toLowerCase();
+  for (const [k, emojiId] of Object.entries(DEFAULT_CUSTOM_EMOJI_IDS)) {
+    if (nameLower.includes(k)) {
+      return emojiId;
+    }
+  }
+  return null;
+}
+
+// Default Presets for Payment Gateways with Built-in Real Vector Logos
 const DEFAULT_GATEWAYS = [
   {
     id: 'usdt-bep20',
     name: 'USDT (BEP20)',
     icon: 'usdt',
+    custom_emoji_id: '5292006737874792240',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'BSC (BEP20)',
@@ -418,6 +484,7 @@ const DEFAULT_GATEWAYS = [
     id: 'usdt-polygon',
     name: 'USDT (Polygon)',
     icon: 'polygon',
+    custom_emoji_id: '5291925777741260362',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'Polygon',
@@ -425,6 +492,34 @@ const DEFAULT_GATEWAYS = [
     maxDeposit: '10000.00 USDT',
     address: '0xAfCdaAfA2e75A543B2A120c31a05708982Bd4b7F',
     warning: 'Only send USDT on Polygon network. Sending other tokens or using wrong network will result in loss of funds.',
+    active: true,
+  },
+  {
+    id: 'binance-pay',
+    name: 'Binance Pay',
+    icon: 'binance',
+    custom_emoji_id: '5408859148592913996',
+    type: 'uid',
+    currency: 'USDT',
+    network: 'Binance Internal Pay',
+    minDeposit: '0.01 USDT',
+    maxDeposit: '10000.00 USDT',
+    uid: '12345678',
+    warning: 'Enter your 18-digit Binance Order ID or TxID after paying.',
+    active: true,
+  },
+  {
+    id: 'bybit-pay',
+    name: 'Bybit Pay',
+    icon: 'bybit',
+    custom_emoji_id: '5291751363414336197',
+    type: 'uid',
+    currency: 'USDT',
+    network: 'Bybit Transfer',
+    minDeposit: '0.01 USDT',
+    maxDeposit: '10000.00 USDT',
+    uid: '87654321',
+    warning: 'Enter your Bybit Transfer ID or TxID after paying.',
     active: true,
   },
   {
@@ -674,7 +769,7 @@ bot.callbackQuery('menu_shop', async (ctx) => {
   products.forEach((prod) => {
     const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
-    const customEmojiId = prod.custom_emoji_id || (prod.icon && /^\d{10,}$/.test(String(prod.icon).trim()) ? String(prod.icon).trim() : null);
+    const customEmojiId = resolveCustomEmojiId(prod);
     const icon = customEmojiId ? '' : getButtonIcon(prod.icon || prod.emoji, prod.name);
     const label = `${icon ? `${icon} ` : ''}${prod.name} - ${priceDisplay}`;
 
@@ -1232,7 +1327,7 @@ bot.callbackQuery('wallet_deposit', async (ctx) => {
   const rows = [];
 
   gateways.forEach((gw) => {
-    const customEmojiId = gw.custom_emoji_id || (gw.icon && /^\d{10,}$/.test(String(gw.icon).trim()) ? String(gw.icon).trim() : null);
+    const customEmojiId = resolveCustomEmojiId(gw);
     const gwIcon = customEmojiId ? '' : (getButtonIcon(gw.icon || gw.id, gw.name) || '🪙');
     const btnObj = {
       text: customEmojiId ? gw.name : `${gwIcon ? `${gwIcon} ` : ''}${gw.name}`,

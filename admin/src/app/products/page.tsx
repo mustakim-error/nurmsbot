@@ -28,7 +28,7 @@ import {
   DialogDescription, 
   DialogFooter 
 } from '@/components/ui/dialog';
-import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji } from '@/lib/brandIcons';
+import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji, VERIFIED_CUSTOM_EMOJIS } from '@/lib/brandIcons';
 
 interface Product {
   id: string;
@@ -419,8 +419,37 @@ export default function ProductsPage() {
                 onChange={(e) => setFormData({ ...formData, custom_emoji_id: e.target.value })}
                 className="font-mono text-xs bg-background/60"
               />
-              <p className="text-[10px] text-muted-foreground leading-normal">
-                💡 Want actual vector brand logos (Netflix, Spotify, Gemini) on buttons? Send any custom emoji to your bot in Telegram to get its ID, then paste here!
+              {/* 1-Click Verified Real Brand Logo Custom Emojis */}
+              <div className="pt-1 space-y-1">
+                <span className="text-[10px] text-muted-foreground font-mono">1-Click Official Logo Packs:</span>
+                <div className="flex flex-wrap gap-1">
+                  {VERIFIED_CUSTOM_EMOJIS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => setFormData({ ...formData, custom_emoji_id: preset.custom_emoji_id })}
+                      className={`text-[10px] px-2 py-0.5 rounded border transition-all ${
+                        formData.custom_emoji_id === preset.custom_emoji_id
+                          ? 'bg-primary text-black font-bold border-primary shadow-sm'
+                          : 'bg-card/70 hover:bg-secondary text-muted-foreground hover:text-white border-border/70'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                  {formData.custom_emoji_id && (
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, custom_emoji_id: '' })}
+                      className="text-[10px] px-2 py-0.5 rounded border border-rose-500/40 text-rose-400 hover:bg-rose-500/20"
+                    >
+                      ✕ Clear ID
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-normal pt-0.5">
+                💡 Want actual vector brand logos (Netflix, Spotify, Gemini) on buttons? You can click any logo pill above or send custom emojis directly to your bot!
               </p>
             </div>
 

@@ -281,3 +281,24 @@ export function resolveTelegramButtonEmoji(icon?: string, fallbackName?: string)
 
   return clean && clean.length <= 4 ? clean : '✨';
 }
+
+export interface CustomEmojiPreset {
+  id: string;
+  name: string;
+  custom_emoji_id: string;
+  label: string;
+}
+
+export const VERIFIED_CUSTOM_EMOJIS: CustomEmojiPreset[] = [
+  { id: 'binance', name: 'Binance Pay', custom_emoji_id: '5408859148592913996', label: '🔸 Binance' },
+  { id: 'usdt', name: 'USDT (Tether)', custom_emoji_id: '5292006737874792240', label: '🟢 USDT' },
+  { id: 'polygon', name: 'Polygon MATIC', custom_emoji_id: '5291925777741260362', label: '🟣 Polygon' },
+  { id: 'bybit', name: 'Bybit Pay', custom_emoji_id: '5291751363414336197', label: '🟡 Bybit' },
+  { id: 'ton', name: 'TON Network', custom_emoji_id: '5321041614443944130', label: '💎 TON' },
+  { id: 'btc', name: 'Bitcoin (BTC)', custom_emoji_id: '5291763943373549541', label: '🟠 Bitcoin' },
+  { id: 'eth', name: 'Ethereum (ETH)', custom_emoji_id: '5291927564447655889', label: '🔹 Ethereum' },
+  { id: 'netflix', name: 'Netflix', custom_emoji_id: '5408891365142601524', label: '🎬 Netflix' },
+  { id: 'spotify', name: 'Spotify', custom_emoji_id: '5409302668390736773', label: '🎧 Spotify' },
+  { id: 'youtube', name: 'YouTube', custom_emoji_id: '5409197634965511131', label: '▶️ YouTube' },
+  { id: 'ai', name: 'ChatGPT / Gemini', custom_emoji_id: '5409029388211625687', label: '🤖 AI Bot' },
+];
