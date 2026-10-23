@@ -487,6 +487,20 @@ export default function GatewaysPage() {
       verifiedAt: new Date().toISOString(),
       method: method,
     });
+
+    const txKey = `tx_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+    await set(ref(rtdb, `transactions/${txKey}`), {
+      id: txKey,
+      type: 'deposit',
+      userId: dep.userId,
+      userName: dep.userName || 'Member',
+      amount: amountToAdd,
+      gateway: dep.gatewayName || 'Payment Gateway',
+      txId: dep.txId,
+      balanceAfter: newBalance,
+      note: `Deposit via ${dep.gatewayName} (${method})`,
+      createdAt: new Date().toISOString(),
+    });
   };
 
   // Confirm Deposit Approval & Credit Balance to User
@@ -527,6 +541,21 @@ export default function GatewaysPage() {
         amount: amountToAdd,
         verifiedAt: new Date().toISOString(),
         method: 'manual_admin',
+      });
+
+      // 5. Record Financial Ledger Transaction
+      const txKey = `tx_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      await set(ref(rtdb, `transactions/${txKey}`), {
+        id: txKey,
+        type: 'deposit',
+        userId: selectedDeposit.userId,
+        userName: selectedDeposit.userName || 'Member',
+        amount: amountToAdd,
+        gateway: selectedDeposit.gatewayName || 'Payment Gateway',
+        txId: selectedDeposit.txId,
+        balanceAfter: newBalance,
+        note: `Deposit approved manually by admin`,
+        createdAt: new Date().toISOString(),
       });
 
       setIsApproveDialogOpen(false);

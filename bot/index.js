@@ -151,6 +151,21 @@ function createStyledKeyboard(rows) {
   return { inline_keyboard };
 }
 
+// Helper: Record financial ledger transaction in Firebase RTDB
+async function recordTransaction(txData) {
+  try {
+    const randomKey = Math.floor(100000 + Math.random() * 900000);
+    const txId = txData.id || `tx_${Date.now()}_${randomKey}`;
+    await set(ref(rtdb, `transactions/${txId}`), {
+      id: txId,
+      ...txData,
+      createdAt: txData.createdAt || new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('Failed to record transaction in RTDB:', err.message);
+  }
+}
+
 // Default Presets for Payment Gateways
 const DEFAULT_GATEWAYS = [
   {
@@ -445,10 +460,10 @@ bot.callbackQuery('menu_shop', async (ctx) => {
   }
 });
 
-// 5. Product Detail & Purchase Preview
-bot.callbackQuery(/^prod_(.+)$/, async (ctx) => {
-  await ctx.answerCallbackQuery();
-  const prodId = ctx.match[1];
+// 5. Helper: Render Product Detail with Interactive Dynamic Stock/Quantity Selector
+async function renderProductDetail(ctx, prodId, quantity = 1, isEdit = true) {
+  const userId = ctx.from.id;
+  const user = await getUser(userId, ctx.from);
 
   let product = null;
   const snap = await get(ref(rtdb, `products/${prodId}`));
@@ -459,22 +474,91 @@ bot.callbackQuery(/^prod_(.+)$/, async (ctx) => {
   if (!product) {
     product = {
       id: prodId,
-      name: prodId.replace('-', ' ').toUpperCase(),
+      name: prodId.replace(/-/g, ' ').toUpperCase(),
       price: 0,
       stock: 10,
       description: 'Instant automated delivery. 30 Days Replacement Warranty.',
     };
   }
 
-  const inStock = Number(product.stock) > 0;
-  const text = `📦 Product: *${product.name}*\n\n💰 Price: *$${product.price}*\n📊 Stock: *${inStock ? `${product.stock} available` : 'Out of Stock'}*\n\n📝 Description:\n${product.description || 'Premium digital product with full warranty.'}\n\nClick below to confirm your purchase:`;
+  const stock = Math.max(0, parseInt(product.stock, 10) || 0);
+  const inStock = stock > 0;
+  const currentQty = inStock ? Math.max(1, Math.min(stock, parseInt(quantity, 10) || 1)) : 0;
+  const unitPrice = Number(product.price || 0);
+  const totalPrice = unitPrice * currentQty;
+  const userBalance = Number(user.balance || 0);
+  const hasFunds = userBalance >= totalPrice;
+  const balanceAfter = userBalance - totalPrice;
+  const shortfall = totalPrice - userBalance;
+
+  let text = `📦 *${product.name}*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `📝 *Description:*\n${product.description || 'Premium digital product with 30-day automated replacement warranty.'}\n\n` +
+    `📊 *Order Specifications:*\n` +
+    `• 🏷️ Available Stock: *${inStock ? `${stock} pcs in stock` : '❌ Out of Stock'}*\n` +
+    `• 💲 Unit Price: *$${unitPrice.toFixed(2)}*\n` +
+    `• 🔢 Selected Quantity: *${currentQty} pcs*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `💰 *Final Total Price:* *$${totalPrice.toFixed(2)}*\n` +
+    `🪙 *Your Wallet Balance:* *$${userBalance.toFixed(2)}*\n`;
+
+  if (!inStock) {
+    text += `⚠️ *Item Unavailable:* Currently out of stock. Please check back later.\n`;
+  } else if (hasFunds) {
+    text += `💳 *Wallet Balance After Purchase:* *$${balanceAfter.toFixed(2)}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `✅ *Funds Ready!* Adjust quantity below or click to confirm and receive instant credentials:`;
+  } else {
+    text += `⚠️ *Insufficient Wallet Balance!* Shortfall: *+$${shortfall.toFixed(2)}*\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `💡 *Top-up Required:* Please deposit *$${shortfall.toFixed(2)}* or reduce quantity to continue.`;
+  }
 
   const rows = [];
+
   if (inStock) {
+    // Row 1: Quantity Increment / Decrement
+    const decQty = Math.max(1, currentQty - 1);
+    const incQty = Math.min(stock, currentQty + 1);
     rows.push([
-      { text: '⚡ Buy Now', callback_data: `buy_${product.id}`, style: 'success' },
+      { text: '➖ 1', callback_data: `qty_${product.id}_${decQty}`, style: 'primary' },
+      { text: `📦 ${currentQty} pcs`, callback_data: 'noop', style: 'primary' },
+      { text: '➕ 1', callback_data: `qty_${product.id}_${incQty}`, style: 'primary' },
     ]);
+
+    // Row 2: Quick Jump & Custom Input
+    const quickRow = [];
+    if (stock >= 5) {
+      quickRow.push({ text: '+5', callback_data: `qty_${product.id}_${Math.min(stock, currentQty + 5)}`, style: 'primary' });
+    }
+    if (stock >= 10) {
+      quickRow.push({ text: '+10', callback_data: `qty_${product.id}_${Math.min(stock, currentQty + 10)}`, style: 'primary' });
+    }
+    quickRow.push({ text: `⚡ Max (${stock})`, callback_data: `qty_${product.id}_${stock}`, style: 'primary' });
+    quickRow.push({ text: '✏️ Custom', callback_data: `custom_qty_${product.id}`, style: 'primary' });
+    rows.push(quickRow);
+
+    // Row 3: Action Button (Buy or Deposit)
+    if (hasFunds) {
+      rows.push([
+        {
+          text: `⚡ Buy ${currentQty} pcs • $${totalPrice.toFixed(2)}`,
+          callback_data: `buy_${product.id}_${currentQty}`,
+          style: 'success',
+        },
+      ]);
+    } else {
+      rows.push([
+        {
+          text: `💰 Deposit Funds (+$${shortfall.toFixed(2)})`,
+          callback_data: 'wallet_deposit',
+          style: 'success',
+        },
+      ]);
+    }
   }
+
+  // Row 4: Navigation
   rows.push([
     { text: '◀️ Back to Shop', callback_data: 'menu_shop', style: 'primary' },
     { text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' },
@@ -482,16 +566,77 @@ bot.callbackQuery(/^prod_(.+)$/, async (ctx) => {
 
   const reply_markup = createStyledKeyboard(rows);
 
-  try {
-    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
-  } catch (e) {
+  if (isEdit) {
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+    } catch {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+    }
+  } else {
     await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+  }
+}
+
+// 5.1 Noop handler for static display buttons
+bot.callbackQuery('noop', async (ctx) => {
+  await ctx.answerCallbackQuery();
+});
+
+// 5.2 Product Detail Initial Entry Point (Default Quantity: 1)
+bot.callbackQuery(/^prod_(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const prodId = ctx.match[1];
+  await renderProductDetail(ctx, prodId, 1, true);
+});
+
+// 5.3 Dynamic Quantity Adjuster Handler
+bot.callbackQuery(/^qty_([^_]+)_(\d+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const prodId = ctx.match[1];
+  const qty = parseInt(ctx.match[2], 10);
+  await renderProductDetail(ctx, prodId, qty, true);
+});
+
+// 5.4 Custom Quantity Prompt Handler
+bot.callbackQuery(/^custom_qty_(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const prodId = ctx.match[1];
+  const userId = ctx.from.id;
+
+  let product = null;
+  const snap = await get(ref(rtdb, `products/${prodId}`));
+  if (snap.exists()) product = snap.val();
+  const stock = Math.max(0, parseInt(product?.stock, 10) || 0);
+
+  userSessions.set(userId, {
+    awaitingCustomQtyFor: prodId,
+    stock: stock,
+    productName: product?.name || 'Product',
+    timestamp: Date.now(),
+  });
+
+  const promptText = `✏️ *Enter Custom Quantity*\n\n` +
+    `Product: *${product?.name || 'Product'}*\n` +
+    `Available Stock: *${stock} pcs*\n` +
+    `Unit Price: *$${Number(product?.price || 0).toFixed(2)}*\n\n` +
+    `👇 *Please reply with the exact number of units you want to purchase (1 - ${stock}):*`;
+
+  const reply_markup = createStyledKeyboard([
+    [{ text: '❌ Cancel', callback_data: `prod_${prodId}`, style: 'danger' }],
+  ]);
+
+  try {
+    await ctx.editMessageText(promptText, { parse_mode: 'Markdown', reply_markup });
+  } catch {
+    await ctx.reply(promptText, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
-// 6. Buy Product Execution
-bot.callbackQuery(/^buy_(.+)$/, async (ctx) => {
+// 6. Buy Product Execution with Unique Order ID & Multi-Item Credentials Delivery
+bot.callbackQuery(/^buy_([^_]+)(?:_(\d+))?$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
   const prodId = ctx.match[1];
+  const qty = Math.max(1, parseInt(ctx.match[2] || '1', 10));
   const userId = ctx.from.id;
   const user = await getUser(userId, ctx.from);
 
@@ -502,68 +647,196 @@ bot.callbackQuery(/^buy_(.+)$/, async (ctx) => {
   }
 
   if (!product) {
-    return ctx.answerCallbackQuery({ text: '❌ Product not found or unavailable!', show_alert: true });
+    return ctx.reply('❌ Product not found or unavailable!', {
+      reply_markup: createStyledKeyboard([
+        [{ text: '◀️ Back to Shop', callback_data: 'menu_shop', style: 'primary' }],
+      ]),
+    });
   }
 
-  if (Number(product.stock) <= 0) {
-    return ctx.answerCallbackQuery({ text: '⚠️ Sorry, this item is out of stock!', show_alert: true });
+  const stock = Math.max(0, parseInt(product.stock, 10) || 0);
+  if (stock < qty) {
+    return ctx.reply(`⚠️ *Stock Shortage!* Only *${stock} pcs* available in stock.`, {
+      parse_mode: 'Markdown',
+      reply_markup: createStyledKeyboard([
+        [{ text: '🔄 Adjust Quantity', callback_data: `prod_${prodId}`, style: 'primary' }],
+        [{ text: '◀️ Back to Shop', callback_data: 'menu_shop', style: 'primary' }],
+      ]),
+    });
   }
 
-  const price = Number(product.price || 0);
+  const unitPrice = Number(product.price || 0);
+  const totalPrice = unitPrice * qty;
   const currentBalance = Number(user.balance || 0);
 
-  if (currentBalance < price) {
-    await ctx.answerCallbackQuery({
-      text: `❌ Insufficient Balance! Price is $${price.toFixed(2)}, your balance is $${currentBalance.toFixed(2)}.`,
-      show_alert: true,
-    });
+  if (currentBalance < totalPrice) {
+    const shortfall = totalPrice - currentBalance;
+    const text = `❌ *Insufficient Balance*\n\n` +
+      `Product: *${product.name}* (x${qty} pcs)\n` +
+      `Total Price: *$${totalPrice.toFixed(2)}*\n` +
+      `Your Current Balance: *$${currentBalance.toFixed(2)}*\n` +
+      `Shortfall: *+$${shortfall.toFixed(2)}*\n\n` +
+      `Please deposit funds to complete this purchase!`;
 
-    const text = `❌ *Insufficient Balance*\n\nYou need *$${price.toFixed(2)}* to purchase *${product.name}*.\nYour current balance: *$${currentBalance.toFixed(2)}*.\n\nPlease deposit balance to proceed!`;
     const reply_markup = createStyledKeyboard([
-      [{ text: '💰 Deposit', callback_data: 'wallet_deposit', style: 'success' }],
+      [{ text: `💰 Deposit +$${shortfall.toFixed(2)}`, callback_data: 'wallet_deposit', style: 'success' }],
+      [{ text: '🔄 Adjust Quantity', callback_data: `prod_${prodId}`, style: 'primary' }],
       [{ text: '◀️ Back to Shop', callback_data: 'menu_shop', style: 'primary' }],
     ]);
 
-    return ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+    try {
+      return await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+    } catch {
+      return await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+    }
   }
 
-  // Deduct balance & create order in RTDB
-  const newBalance = currentBalance - price;
+  // 1. Generate Clean, Official Unique Order ID
+  const orderNumber = Math.floor(100000 + Math.random() * 900000);
+  const orderId = `ORD-${orderNumber}`;
+  const formattedOrderId = `#${orderId}`;
 
-  await update(ref(rtdb, `users/${userId}`), { balance: newBalance });
-  await update(ref(rtdb, `products/${prodId}`), {
-    stock: Math.max(0, (product.stock || 1) - 1),
+  // 2. Intelligent Multi-Credential Extraction
+  const rawPayload = product.payload || '';
+  const lines = rawPayload.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  let deliveredPayload = '';
+  let remainingPayload = rawPayload;
+
+  if (lines.length >= qty && lines.length > 1) {
+    deliveredPayload = lines.slice(0, qty).join('\n');
+    remainingPayload = lines.slice(qty).join('\n');
+  } else if (lines.length > 0 && lines.length < qty) {
+    deliveredPayload = lines.join('\n');
+    remainingPayload = '';
+  } else {
+    deliveredPayload = rawPayload || 'Standard automated digital delivery confirmed. Contact support for warranty activation.';
+  }
+
+  // 3. Deduct balance & decrement stock
+  const newBalance = currentBalance - totalPrice;
+  const newStock = Math.max(0, stock - qty);
+
+  await update(ref(rtdb, `users/${userId}`), {
+    balance: newBalance,
+    updatedAt: new Date().toISOString(),
   });
 
-  const orderId = `order_${Date.now()}`;
-  await set(ref(rtdb, `orders/${orderId}`), {
+  await update(ref(rtdb, `products/${prodId}`), {
+    stock: newStock,
+    payload: remainingPayload,
+    updatedAt: new Date().toISOString(),
+  });
+
+  // 4. Save Official Order in RTDB
+  const orderData = {
     id: orderId,
+    orderId: formattedOrderId,
     userId: String(userId),
-    userName: user.name,
+    userName: user.name || ctx.from.first_name || 'Member',
     productId: product.id,
     productName: product.name,
-    price: price,
-    payload: product.payload || 'Product credentials delivered successfully.',
+    quantity: qty,
+    unitPrice: unitPrice,
+    totalPrice: totalPrice,
+    price: totalPrice,
+    payload: deliveredPayload,
     status: 'completed',
+    balanceBefore: currentBalance,
+    balanceAfter: newBalance,
     createdAt: new Date().toISOString(),
+  };
+  await set(ref(rtdb, `orders/${orderId}`), orderData);
+
+  // 5. Record Financial Ledger Transaction
+  await recordTransaction({
+    type: 'purchase',
+    orderId: formattedOrderId,
+    userId: String(userId),
+    userName: user.name || ctx.from.first_name || 'Member',
+    amount: -totalPrice,
+    productName: product.name,
+    quantity: qty,
+    unitPrice: unitPrice,
+    balanceAfter: newBalance,
+    note: `Purchase: ${product.name} (x${qty})`,
   });
 
-  await ctx.answerCallbackQuery({ text: '🎉 Purchase successful!' });
-
-  const successText = `🎉 *Purchase Successful!*\n\nProduct: *${product.name}*\nDeducted: *$${price.toFixed(2)}*\nRemaining Balance: *$${newBalance.toFixed(2)}*\n\n🔑 *Your Product Credentials / Activation:*\n\`${product.payload || 'Account credentials sent to your inbox. Contact support if needed!'}\`\n\nThank you for choosing ${botConfig.shopName}!`;
+  // 6. Deliver Ultra-Slick Digital Receipt with Monospace Credentials
+  const successText = `🎉 *PURCHASE SUCCESSFUL!*\n\n` +
+    `🧾 *Order ID:* \`${formattedOrderId}\`\n` +
+    `📦 *Product:* *${product.name}*\n` +
+    `🔢 *Quantity:* *${qty} pcs*\n` +
+    `💲 *Unit Price:* *$${unitPrice.toFixed(2)}*\n` +
+    `💰 *Total Paid:* *$${totalPrice.toFixed(2)}*\n` +
+    `🪙 *Remaining Balance:* *$${newBalance.toFixed(2)}*\n` +
+    `📅 *Date:* *${new Date().toLocaleString('en-US', { timeZone: 'Asia/Dhaka', hour12: true })}*\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🔑 *YOUR DELIVERED CREDENTIALS / CODE:*\n` +
+    `\`\`\`\n${deliveredPayload}\n\`\`\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `> 🛡️ *Warranty Active:* 30-Day automated replacement warranty.\n` +
+    `_Your credentials have also been saved in your Order History!_`;
 
   const reply_markup = createStyledKeyboard([
     [
+      { text: `🔑 Receipt (${formattedOrderId})`, callback_data: `view_ord_${orderId}`, style: 'primary' },
       { text: '🧾 Order History', callback_data: 'menu_orders', style: 'primary' },
+    ],
+    [
       { text: '🛒 Shop More', callback_data: 'menu_shop', style: 'success' },
+      { text: '📜 Transactions', callback_data: 'menu_transactions', style: 'primary' },
     ],
     [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
   ]);
 
-  await ctx.editMessageText(successText, { parse_mode: 'Markdown', reply_markup });
+  try {
+    await ctx.editMessageText(successText, { parse_mode: 'Markdown', reply_markup });
+  } catch {
+    await ctx.reply(successText, { parse_mode: 'Markdown', reply_markup });
+  }
 });
 
-// 7. Wallet Menu Handler (Image 4)
+// 6.1 View Single Order Receipt & Credentials
+bot.callbackQuery(/^view_ord_(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const orderId = ctx.match[1];
+  const snap = await get(ref(rtdb, `orders/${orderId}`));
+
+  if (!snap.exists()) {
+    return ctx.reply('❌ Order record not found.', {
+      reply_markup: createStyledKeyboard([
+        [{ text: '🧾 Order History', callback_data: 'menu_orders', style: 'primary' }],
+      ]),
+    });
+  }
+
+  const ord = snap.val();
+  const text = `🧾 *Official Order Invoice*\n\n` +
+    `📌 *Order ID:* \`${ord.orderId || ('#' + ord.id)}\`\n` +
+    `📦 *Product:* *${ord.productName}*\n` +
+    `🔢 *Quantity:* *${ord.quantity || 1} pcs*\n` +
+    `💰 *Amount Paid:* *$${Number(ord.totalPrice || ord.price || 0).toFixed(2)}*\n` +
+    `🛡️ *Status:* ✅ *${ord.status || 'completed'}*\n` +
+    `📅 *Date:* *${ord.createdAt ? new Date(ord.createdAt).toLocaleString('en-US', { timeZone: 'Asia/Dhaka', hour12: true }) : 'N/A'}*\n\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+    `🔑 *DELIVERED CREDENTIALS:*\n` +
+    `\`\`\`\n${ord.payload || 'Product credentials delivered'}\n\`\`\`\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+    `> 🛡️ 30-Day Automated Replacement Warranty Active!`;
+
+  const reply_markup = createStyledKeyboard([
+    [{ text: '◀️ Back to Orders', callback_data: 'menu_orders', style: 'primary' }],
+    [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  ]);
+
+  try {
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+  } catch {
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+  }
+});
+
+// 7. Wallet Menu Handler with Live Balance & Transactions Entry
 bot.callbackQuery('menu_wallet', async (ctx) => {
   await ctx.answerCallbackQuery();
   const userId = ctx.from.id;
@@ -577,7 +850,8 @@ bot.callbackQuery('menu_wallet', async (ctx) => {
   });
 
   const reply_markup = createStyledKeyboard([
-    [{ text: '💰 Deposit', callback_data: 'wallet_deposit', style: 'success' }],
+    [{ text: '💰 Deposit Funds', callback_data: 'wallet_deposit', style: 'success' }],
+    [{ text: '📜 Transaction History', callback_data: 'menu_transactions', style: 'primary' }],
     [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
   ]);
 
@@ -585,6 +859,70 @@ bot.callbackQuery('menu_wallet', async (ctx) => {
     await ctx.editMessageText(text, { reply_markup });
   } catch (err) {
     await ctx.reply(text, { reply_markup });
+  }
+});
+
+// 7.1 Wallet Transactions Statement Handler
+bot.callbackQuery('menu_transactions', async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const userId = ctx.from.id;
+  const user = await getUser(userId, ctx.from);
+  const balance = Number(user.balance || 0).toFixed(2);
+
+  let txList = [];
+  try {
+    const snap = await get(ref(rtdb, 'transactions'));
+    if (snap.exists()) {
+      const val = snap.val();
+      for (const [key, item] of Object.entries(val)) {
+        if (item.userId === String(userId)) {
+          txList.push({ id: key, ...item });
+        }
+      }
+      txList.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    }
+  } catch (e) {
+    console.warn('Transactions query failed in RTDB:', e.message);
+  }
+
+  let text = `📜 *Wallet Transaction Statement*\n\n` +
+    `🪙 *Current Balance:* *$${balance}*\n` +
+    `📊 *Total Transactions:* *${txList.length}*\n` +
+    `━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  if (txList.length === 0) {
+    text += `No transactions recorded on this account yet. Deposit funds or make a purchase to start your statement!`;
+  } else {
+    txList.slice(0, 8).forEach((tx) => {
+      const isDeposit = tx.type === 'deposit';
+      const amountVal = Math.abs(Number(tx.amount || 0)).toFixed(2);
+      const dateStr = tx.createdAt ? new Date(tx.createdAt).toLocaleDateString() : '';
+
+      if (isDeposit) {
+        text += `🟢 *+$${amountVal}* • *Deposit* (${tx.gateway || 'Crypto'})\n` +
+          `   📅 ${dateStr} | Ref: \`${tx.txId ? tx.txId.slice(0, 14) + '...' : tx.id}\`\n\n`;
+      } else {
+        text += `🔴 *-$${amountVal}* • *Purchase* (${tx.productName || 'Product'} x${tx.quantity || 1})\n` +
+          `   📅 ${dateStr} | Order: \`${tx.orderId || tx.id}\`\n\n`;
+      }
+    });
+  }
+
+  const reply_markup = createStyledKeyboard([
+    [
+      { text: '💰 Deposit Funds', callback_data: 'wallet_deposit', style: 'success' },
+      { text: '🧾 Order History', callback_data: 'menu_orders', style: 'primary' },
+    ],
+    [
+      { text: '↩️ Back to Wallet', callback_data: 'menu_wallet', style: 'primary' },
+      { text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' },
+    ],
+  ]);
+
+  try {
+    await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+  } catch (e) {
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
   }
 });
 
@@ -769,7 +1107,7 @@ bot.callbackQuery(/^submit_tx_(.+)$/, async (ctx) => {
   }
 });
 
-// 8.4 Message Text Listener: Receives TxID and Processes Automated or Manual Verification
+// 8.4 Message Text Listener: Receives Custom Quantity & TxID Submissions
 bot.on('message:text', async (ctx) => {
   const text = ctx.message.text.trim();
   if (text.startsWith('/')) return; // Ignore slash commands
@@ -777,6 +1115,36 @@ bot.on('message:text', async (ctx) => {
   const userId = ctx.from.id;
   const session = userSessions.get(userId);
 
+  // 1. Handle Custom Quantity Input
+  if (session && session.awaitingCustomQtyFor) {
+    const prodId = session.awaitingCustomQtyFor;
+    const maxStock = session.stock || 1;
+    const inputQty = parseInt(text, 10);
+
+    if (isNaN(inputQty) || inputQty <= 0) {
+      return ctx.reply(`⚠️ *Invalid Quantity!* Please send a valid positive number between *1* and *${maxStock}*.`, {
+        parse_mode: 'Markdown',
+        reply_markup: createStyledKeyboard([
+          [{ text: '❌ Cancel', callback_data: `prod_${prodId}`, style: 'danger' }],
+        ]),
+      });
+    }
+
+    if (inputQty > maxStock) {
+      return ctx.reply(`⚠️ *Stock Shortage!* Available stock is *${maxStock} pcs*.\n\nPlease enter a quantity between *1* and *${maxStock}*:`, {
+        parse_mode: 'Markdown',
+        reply_markup: createStyledKeyboard([
+          [{ text: `⚡ Choose Max (${maxStock})`, callback_data: `qty_${prodId}_${maxStock}`, style: 'primary' }],
+          [{ text: '❌ Cancel', callback_data: `prod_${prodId}`, style: 'danger' }],
+        ]),
+      });
+    }
+
+    userSessions.delete(userId);
+    return renderProductDetail(ctx, prodId, inputQty, false);
+  }
+
+  // 2. Handle Deposit TxID / Order ID Submission
   if (session && session.awaitingTxFor) {
     const rawInput = text;
     const parts = rawInput.split(/\s+/);
@@ -946,6 +1314,17 @@ bot.on('message:text', async (ctx) => {
               method: 'binance_api',
             });
 
+            await recordTransaction({
+              type: 'deposit',
+              userId: String(userId),
+              userName: ctx.from.first_name || ctx.from.username || 'Member',
+              amount: creditedAmount,
+              gateway: 'Binance Pay',
+              txId: txId,
+              balanceAfter: newBal,
+              note: 'Deposit via Binance Pay Read-Only API',
+            });
+
             const successMsg = `⚡ *Binance Pay Confirmed Automatically!*\n\n` +
               `💎 *Gateway:* *Binance Pay*\n` +
               `💰 *Amount Credited:* *$${creditedAmount.toFixed(2)} ${binanceResult.currency || 'USDT'}*\n` +
@@ -1024,6 +1403,17 @@ bot.on('message:text', async (ctx) => {
               method: 'bybit_api',
             });
 
+            await recordTransaction({
+              type: 'deposit',
+              userId: String(userId),
+              userName: ctx.from.first_name || ctx.from.username || 'Member',
+              amount: creditedAmount,
+              gateway: 'Bybit Pay',
+              txId: txId,
+              balanceAfter: newBal,
+              note: 'Deposit via Bybit Read-Only API',
+            });
+
             const successMsg = `⚡ *Bybit Transfer Confirmed Automatically!*\n\n` +
               `💎 *Gateway:* *Bybit Pay*\n` +
               `💰 *Amount Credited:* *$${creditedAmount.toFixed(2)} ${bybitResult.currency || 'USDT'}*\n` +
@@ -1100,6 +1490,17 @@ bot.on('message:text', async (ctx) => {
           method: 'uid_auto',
         });
 
+        await recordTransaction({
+          type: 'deposit',
+          userId: String(userId),
+          userName: ctx.from.first_name || ctx.from.username || 'Member',
+          amount: amountToCredit,
+          gateway: gatewayName,
+          txId: txId,
+          balanceAfter: newBal,
+          note: `Auto-deposit via ${gatewayName}`,
+        });
+
         const successMsg = `⚡ *${gatewayName} Payment Approved Automatically!*\n\n` +
           `💎 *Gateway:* *${gatewayName}*\n` +
           `💰 *Credited Amount:* *$${amountToCredit.toFixed(2)} USDT*\n` +
@@ -1140,7 +1541,7 @@ bot.on('message:text', async (ctx) => {
   }
 });
 
-// 9. Order History Handler
+// 9. Order History Handler with Order ID and 1-Click Credential Review
 bot.callbackQuery('menu_orders', async (ctx) => {
   await ctx.answerCallbackQuery();
   const userId = ctx.from.id;
@@ -1152,28 +1553,51 @@ bot.callbackQuery('menu_orders', async (ctx) => {
       const val = snap.val();
       for (const [key, item] of Object.entries(val)) {
         if (item.userId === String(userId)) {
-          orders.push(item);
+          orders.push({ id: key, ...item });
         }
       }
-      orders.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      orders.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
     }
   } catch (e) {
     console.warn('Orders query failed in RTDB:', e.message);
   }
 
-  let text = `🧾 *Your Recent Orders*\n\n`;
+  let text = `🧾 *Your Order History*\n\n`;
+  const rows = [];
+
   if (orders.length === 0) {
-    text += `You have not made any purchases yet. Browse our shop to get started!`;
+    text += `You have not placed any orders yet. Browse our store to make your first purchase! 🛒`;
   } else {
-    orders.slice(0, 10).forEach((ord, idx) => {
-      text += `${idx + 1}. *${ord.productName}* - $${Number(ord.price).toFixed(2)}\n📅 ${ord.createdAt ? ord.createdAt.slice(0, 10) : ''} | Status: ${ord.status}\n\n`;
+    text += `Found *${orders.length}* total purchases. Tap any order below to view and copy credentials:\n\n`;
+    orders.slice(0, 6).forEach((ord, idx) => {
+      const formattedId = ord.orderId || ('#' + ord.id);
+      const total = Number(ord.totalPrice || ord.price || 0).toFixed(2);
+      const dateStr = ord.createdAt ? new Date(ord.createdAt).toLocaleDateString() : '';
+      text += `${idx + 1}. *${ord.productName}* (x${ord.quantity || 1} pcs)\n` +
+        `   🧾 ID: \`${formattedId}\` | 💰 *$${total}*\n` +
+        `   📅 ${dateStr} | Status: ✅ *${ord.status || 'completed'}*\n\n`;
+
+      if (idx < 4) {
+        rows.push([
+          {
+            text: `🔑 View ${formattedId} (${(ord.productName || 'Order').slice(0, 16)})`,
+            callback_data: `view_ord_${ord.id}`,
+            style: 'primary',
+          },
+        ]);
+      }
     });
   }
 
-  const reply_markup = createStyledKeyboard([
-    [{ text: '🛒 Browse Shop', callback_data: 'menu_shop', style: 'success' }],
-    [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
+  rows.push([
+    { text: '🛒 Browse Shop', callback_data: 'menu_shop', style: 'success' },
+    { text: '📜 Transactions', callback_data: 'menu_transactions', style: 'primary' },
   ]);
+  rows.push([
+    { text: '◀️ Main Menu', callback_data: 'back_to_menu', style: 'primary' },
+  ]);
+
+  const reply_markup = createStyledKeyboard(rows);
 
   try {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });

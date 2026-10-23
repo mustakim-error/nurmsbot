@@ -66,7 +66,7 @@ export default function DashboardPage() {
         for (const [key, item] of Object.entries(val)) {
           const order = item as any;
           ordersList.push({ id: key, ...order });
-          revenue += Number(order.price || 0);
+          revenue += Number(order.totalPrice || order.price || 0);
         }
         ordersList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       }
@@ -242,11 +242,14 @@ export default function DashboardPage() {
                   {recentOrders.map((order) => (
                     <TableRow key={order.id}>
                       <TableCell className="font-medium text-white">
-                        {order.userName || 'Member'} <span className="text-[11px] text-muted-foreground font-mono">({order.userId})</span>
+                        <div>{order.userName || 'Member'}</div>
+                        <div className="text-[10px] text-primary font-mono">{order.orderId || ('#' + order.id)}</div>
                       </TableCell>
-                      <TableCell className="text-muted-foreground">{order.productName}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {order.productName} {order.quantity && order.quantity > 1 ? `(x${order.quantity})` : ''}
+                      </TableCell>
                       <TableCell className="font-mono text-primary font-semibold">
-                        ${Number(order.price).toFixed(2)}
+                        ${Number(order.totalPrice || order.price || 0).toFixed(2)}
                       </TableCell>
                       <TableCell>
                         <Badge variant="success" className="text-[10px]">

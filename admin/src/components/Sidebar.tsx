@@ -14,7 +14,8 @@ import {
   ChevronRight,
   Activity,
   Zap,
-  Coins
+  Coins,
+  ArrowLeftRight
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -25,8 +26,9 @@ const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Products & Pricing', href: '/products', icon: ShoppingBag },
   { name: 'Payment Gateways', href: '/gateways', icon: Coins },
-  { name: 'Users & Wallets', href: '/users', icon: Users },
   { name: 'Order History', href: '/orders', icon: Receipt },
+  { name: 'Transactions', href: '/transactions', icon: ArrowLeftRight },
+  { name: 'Users & Wallets', href: '/users', icon: Users },
   { name: '24/7 Uptime & Cron', href: '/uptime', icon: Activity },
   { name: 'Bot Settings', href: '/settings', icon: Settings },
 ];
