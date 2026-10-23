@@ -55,6 +55,7 @@ interface PaymentGateway {
   instruction?: string;
   active: boolean;
   order: number;
+  custom_emoji_id?: string;
   autoApprove?: boolean;
   autoApproveAmount?: number;
   apiKey?: string;
@@ -332,6 +333,7 @@ export default function GatewaysPage() {
     setEditingGateway(gw);
     setGatewayForm({
       ...gw,
+      custom_emoji_id: gw.custom_emoji_id || '',
       apiKey: gw.apiKey || '',
       apiSecret: gw.apiSecret || '',
     });
@@ -355,6 +357,7 @@ export default function GatewaysPage() {
         name: gatewayForm.name,
         icon: gatewayForm.icon || resolvedEmoji || '🔸',
         emoji: resolvedEmoji,
+        custom_emoji_id: gatewayForm.custom_emoji_id?.trim() || '',
         type: gatewayForm.type || 'crypto_address',
         currency: gatewayForm.currency || 'USDT',
         network: gatewayForm.network || '',
@@ -982,8 +985,28 @@ export default function GatewaysPage() {
                 <span className="text-primary font-bold">Native Style</span>
               </div>
               <div className="py-2 px-3 rounded-lg text-center font-bold text-xs border border-primary/40 bg-primary/20 text-white shadow-sm">
-                {resolveTelegramButtonEmoji(gatewayForm.icon || gatewayForm.name, gatewayForm.name)} {gatewayForm.name || 'Payment Gateway'}
+                {gatewayForm.custom_emoji_id ? '✨ [Custom Vector Logo] ' : `${resolveTelegramButtonEmoji(gatewayForm.icon || gatewayForm.name, gatewayForm.name)} `}{gatewayForm.name || 'Payment Gateway'}
               </div>
+            </div>
+
+            {/* Telegram Custom Emoji ID (For Actual Vector Brand Logos like Binance, Bybit, USDT) */}
+            <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/70 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-foreground text-[11px] flex items-center gap-1.5">
+                  <span>🎨 Telegram Custom Emoji ID</span>
+                  <span className="text-[10px] text-amber-400 font-mono font-normal">(For Real Brand Logos)</span>
+                </label>
+                <span className="text-[10px] text-muted-foreground font-mono">Telegram 7.0+</span>
+              </div>
+              <Input
+                placeholder="e.g. 5368324170671202286 (64-bit Telegram Custom Emoji ID)"
+                value={gatewayForm.custom_emoji_id || ''}
+                onChange={(e) => setGatewayForm({ ...gatewayForm, custom_emoji_id: e.target.value })}
+                className="font-mono text-xs bg-background/60"
+              />
+              <p className="text-[10px] text-muted-foreground leading-normal">
+                💡 Other Telegram bots use <strong>Telegram Custom Emojis</strong> to display real vector logos on buttons. You can send any custom emoji directly to your bot in Telegram to automatically extract and copy its ID!
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

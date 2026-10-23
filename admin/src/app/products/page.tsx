@@ -36,6 +36,8 @@ interface Product {
   price: number;
   stock: number;
   icon?: string;
+  emoji?: string;
+  custom_emoji_id?: string;
   description: string;
   payload: string;
   active: boolean;
@@ -54,6 +56,7 @@ export default function ProductsPage() {
     price: 0,
     stock: 10,
     icon: '✨',
+    custom_emoji_id: '',
     description: '',
     payload: '',
     active: true,
@@ -86,6 +89,7 @@ export default function ProductsPage() {
       price: 0,
       stock: 10,
       icon: '✨',
+      custom_emoji_id: '',
       description: 'Instant automated delivery. 30 Days Replacement Warranty.',
       payload: 'Your login credentials: email@domain.com | pass: Secret1234',
       active: true,
@@ -100,6 +104,7 @@ export default function ProductsPage() {
       price: p.price,
       stock: p.stock,
       icon: p.icon || '✨',
+      custom_emoji_id: p.custom_emoji_id || '',
       description: p.description || '',
       payload: p.payload || '',
       active: p.active !== undefined ? p.active : true,
@@ -122,6 +127,7 @@ export default function ProductsPage() {
         stock: Number(formData.stock),
         icon: formData.icon || resolvedEmoji || '✨',
         emoji: resolvedEmoji,
+        custom_emoji_id: formData.custom_emoji_id?.trim() || '',
         description: formData.description,
         payload: formData.payload,
         active: formData.active,
@@ -394,8 +400,28 @@ export default function ProductsPage() {
                   ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50' 
                   : 'bg-red-600/30 text-red-300 border-red-500/50'
               }`}>
-                {resolveTelegramButtonEmoji(formData.icon, formData.name)} {formData.name || 'Product Title'} - {Number(formData.price) === 0 ? '0' : `$${Number(formData.price).toFixed(2)}`}
+                {formData.custom_emoji_id ? '✨ [Custom Vector Logo] ' : `${resolveTelegramButtonEmoji(formData.icon, formData.name)} `}{formData.name || 'Product Title'} - {Number(formData.price) === 0 ? '0' : `$${Number(formData.price).toFixed(2)}`}
               </div>
+            </div>
+
+            {/* Telegram Custom Emoji ID (For Real Brand Logos) */}
+            <div className="p-2.5 rounded-lg bg-secondary/30 border border-border/70 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="font-semibold text-foreground text-[11px] flex items-center gap-1.5">
+                  <span>🎨 Telegram Custom Emoji ID</span>
+                  <span className="text-[10px] text-amber-400 font-mono font-normal">(For Real Brand Logos)</span>
+                </label>
+                <span className="text-[10px] text-muted-foreground font-mono">Telegram 7.0+</span>
+              </div>
+              <Input
+                placeholder="e.g. 5368324170671202286 (64-bit Telegram Custom Emoji ID)"
+                value={formData.custom_emoji_id || ''}
+                onChange={(e) => setFormData({ ...formData, custom_emoji_id: e.target.value })}
+                className="font-mono text-xs bg-background/60"
+              />
+              <p className="text-[10px] text-muted-foreground leading-normal">
+                💡 Want actual vector brand logos (Netflix, Spotify, Gemini) on buttons? Send any custom emoji to your bot in Telegram to get its ID, then paste here!
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

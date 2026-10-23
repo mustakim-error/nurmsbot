@@ -230,7 +230,7 @@ async function isChannelMember(ctx, userId) {
   }
 }
 
-// Helper: Create Inline Keyboard with Native Telegram API button styles & copy_text
+// Helper: Create Inline Keyboard with Native Telegram API button styles & copy_text & custom_emoji
 function createStyledKeyboard(rows) {
   const inline_keyboard = rows.map((row) =>
     row.map((btn) => {
@@ -239,6 +239,7 @@ function createStyledKeyboard(rows) {
       if (btn.callback_data) buttonObj.callback_data = btn.callback_data;
       if (btn.copy_text) buttonObj.copy_text = btn.copy_text;
       if (btn.style) buttonObj.style = btn.style;
+      if (btn.icon_custom_emoji_id) buttonObj.icon_custom_emoji_id = String(btn.icon_custom_emoji_id);
       return buttonObj;
     })
   );
@@ -673,16 +674,20 @@ bot.callbackQuery('menu_shop', async (ctx) => {
   products.forEach((prod) => {
     const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
-    const icon = getButtonIcon(prod.icon || prod.emoji, prod.name);
+    const customEmojiId = prod.custom_emoji_id || (prod.icon && /^\d{10,}$/.test(String(prod.icon).trim()) ? String(prod.icon).trim() : null);
+    const icon = customEmojiId ? '' : getButtonIcon(prod.icon || prod.emoji, prod.name);
     const label = `${icon ? `${icon} ` : ''}${prod.name} - ${priceDisplay}`;
 
-    rows.push([
-      {
-        text: label,
-        callback_data: `prod_${prod.id}`,
-        style: isAvailable ? 'success' : 'danger',
-      },
-    ]);
+    const btnObj = {
+      text: label,
+      callback_data: `prod_${prod.id}`,
+      style: isAvailable ? 'success' : 'danger',
+    };
+    if (customEmojiId) {
+      btnObj.icon_custom_emoji_id = String(customEmojiId);
+    }
+
+    rows.push([btnObj]);
   });
 
   rows.push([
@@ -1227,14 +1232,17 @@ bot.callbackQuery('wallet_deposit', async (ctx) => {
   const rows = [];
 
   gateways.forEach((gw) => {
-    const gwIcon = getButtonIcon(gw.icon || gw.id) || '🪙';
-    rows.push([
-      {
-        text: `${gwIcon} ${gw.name}`,
-        callback_data: `gate_${gw.id}`,
-        style: 'primary',
-      },
-    ]);
+    const customEmojiId = gw.custom_emoji_id || (gw.icon && /^\d{10,}$/.test(String(gw.icon).trim()) ? String(gw.icon).trim() : null);
+    const gwIcon = customEmojiId ? '' : (getButtonIcon(gw.icon || gw.id, gw.name) || '🪙');
+    const btnObj = {
+      text: customEmojiId ? gw.name : `${gwIcon ? `${gwIcon} ` : ''}${gw.name}`,
+      callback_data: `gate_${gw.id}`,
+      style: 'primary',
+    };
+    if (customEmojiId) {
+      btnObj.icon_custom_emoji_id = String(customEmojiId);
+    }
+    rows.push([btnObj]);
   });
 
   rows.push([
@@ -1398,6 +1406,25 @@ bot.callbackQuery(/^submit_tx_(.+)$/, async (ctx) => {
   } catch {
     await ctx.reply(promptText, { parse_mode: 'Markdown', reply_markup });
   }
+});
+
+// 8.35 Custom Emoji Helper: When user sends any Telegram Custom Emoji, detect and return its custom_emoji_id
+bot.on('message', async (ctx, next) => {
+  const entities = ctx.message?.entities || ctx.message?.caption_entities || [];
+  const customEmojis = entities.filter((e) => e.type === 'custom_emoji');
+  const userId = ctx.from?.id;
+
+  if (customEmojis.length > 0 && (!userId || !userSessions.get(userId))) {
+    const ids = customEmojis.map((e) => `• \`${e.custom_emoji_id}\``).join('\n');
+    await ctx.reply(
+      `✨ *Telegram Custom Emoji Detected!*\n\n` +
+      `🆔 *Custom Emoji ID:*\n${ids}\n\n` +
+      `💡 *How to use in Bot Buttons:*\n` +
+      `Copy this ID and paste it in Admin Panel (*Telegram Custom Emoji ID*) for your product or gateway!`,
+      { parse_mode: 'Markdown' }
+    );
+  }
+  return next();
 });
 
 // 8.4 Message Text Listener: Receives Custom Quantity & TxID Submissions
