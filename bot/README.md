@@ -46,7 +46,7 @@ Render allows you to host this bot 24/7 with zero cost:
    - **Build Command:** `npm install`
    - **Start Command:** `npm start`
 5. In **Environment Variables**, add:
-   - `BOT_TOKEN` = `8711373245:AAGRz0PbAJ9tzac3VVr8zg_UBrIloXCT_fg`
+   - `BOT_TOKEN` = `8711373245:AAHZMSBwkhKrNjsyj5yQRYdw0E2YgVvpzWk`
    - `CHANNEL_ID` = `@WarzoneShop`
    - `CHANNEL_LINK` = `https://t.me/WarzoneShop`
    - `SHOP_NAME` = `Warzone Shop`

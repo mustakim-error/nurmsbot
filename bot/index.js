@@ -5,17 +5,17 @@ const { rtdb } = require('./firebase');
 const { ref, get, set, update, onValue } = require('firebase/database');
 
 // Default Token embedded so Render needs zero configuration!
-const token = process.env.BOT_TOKEN || '8711373245:AAGRz0PbAJ9tzac3VVr8zg_UBrIloXCT_fg';
+const token = process.env.BOT_TOKEN || '8711373245:AAHZMSBwkhKrNjsyj5yQRYdw0E2YgVvpzWk';
 
 const bot = new Bot(token);
 
 // Default Bot Settings (Configured to user's exact channels)
 let botConfig = {
-  shopName: 'Nurms Shop',
-  channelId: '@owloverdown',
-  channelLink: 'https://t.me/owloverdown',
-  botLink: '@NurmsBOT',
-  supportUsername: '@owloverdown',
+  shopName: process.env.SHOP_NAME || 'Nurms Shop',
+  channelId: process.env.CHANNEL_ID || '@owloverdown',
+  channelLink: process.env.CHANNEL_LINK || 'https://t.me/owloverdown',
+  botLink: process.env.BOT_LINK || '@NurmsBOT',
+  supportUsername: process.env.SUPPORT_USERNAME || '@owloverdown',
 
   // 24/7 Uptime & Cron Settings
   selfPingUrl: '', // e.g., 'https://nurmsbot.onrender.com'
@@ -112,12 +112,20 @@ async function getUser(userId, userInfo = {}) {
 
 // Helper: Check if user joined the official channel
 async function isChannelMember(ctx, userId) {
+  if (!botConfig.channelId || botConfig.channelId.trim() === '') return true;
   try {
     const member = await ctx.api.getChatMember(botConfig.channelId, userId);
     const validStatuses = ['creator', 'administrator', 'member', 'restricted'];
     return validStatuses.includes(member.status);
   } catch (err) {
-    console.error(`⚠️ Error checking chat member for ${userId}:`, err.message);
+    console.warn(`⚠️ Chat member check for ${userId} in ${botConfig.channelId}:`, err.message);
+    // If bot is not an administrator in the channel, Telegram throws:
+    // "chat not found" or "bot is not a member of the channel chat"
+    // In this case, allow access so the bot is not completely bricked until added as admin
+    if (err.message && (err.message.includes('not a member') || err.message.includes('chat not found') || err.message.includes('member list is inaccessible'))) {
+      console.warn(`👉 Reminder: Add your bot as Administrator in ${botConfig.channelId} for strict channel enforcement.`);
+      return true;
+    }
     return false;
   }
 }
