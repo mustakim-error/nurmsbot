@@ -433,9 +433,10 @@ const DEFAULT_CUSTOM_EMOJI_IDS = {
   'usdt-ton': '5292006737874792240',
   tether: '5292006737874792240',
 
-  // Polygon
+  // Polygon / MATIC
   polygon: '5291925777741260362',
   matic: '5291925777741260362',
+  pol: '5291925777741260362',
 
   // Bybit & Exchange
   bybit: '5291751363414336197',
@@ -449,7 +450,22 @@ const DEFAULT_CUSTOM_EMOJI_IDS = {
   ton: '5321041614443944130',
   toncoin: '5321041614443944130',
 
-  // Digital Products & AI Services
+  // CryptoIcons Top Verified Tokens
+  sol: '5291761035680688908',
+  solana: '5291761035680688908',
+  ltc: '5291763943373549541',
+  litecoin: '5291763943373549541',
+  doge: '5291743851516536161',
+  dogecoin: '5291743851516536161',
+  xrp: '5289776520271768636',
+  ripple: '5289776520271768636',
+  avax: '5291746248108287932',
+  avalanche: '5291746248108287932',
+  trx: '5292252143716147573',
+  tron: '5292252143716147573',
+  crypto: '5291788192758900426',
+
+  // Digital Products & AI Services (Brands_Pack)
   netflix: '5408891365142601524',
   spotify: '5409302668390736773',
   youtube: '5409197634965511131',
@@ -469,11 +485,15 @@ function resolveCustomEmojiId(item = {}) {
     return String(item.icon).trim();
   }
 
-  const iconKey = String(item.icon || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
   const idKey = String(item.id || '').toLowerCase().replace(/[^a-z0-9-]/g, '');
-
   if (DEFAULT_CUSTOM_EMOJI_IDS[idKey]) return DEFAULT_CUSTOM_EMOJI_IDS[idKey];
-  if (DEFAULT_CUSTOM_EMOJI_IDS[iconKey]) return DEFAULT_CUSTOM_EMOJI_IDS[iconKey];
+
+  const iconLower = String(item.icon || '').toLowerCase();
+  for (const [k, emojiId] of Object.entries(DEFAULT_CUSTOM_EMOJI_IDS)) {
+    if (iconLower.includes(k)) {
+      return emojiId;
+    }
+  }
 
   const nameLower = String(item.name || '').toLowerCase();
   for (const [k, emojiId] of Object.entries(DEFAULT_CUSTOM_EMOJI_IDS)) {
@@ -790,8 +810,7 @@ bot.callbackQuery('menu_shop', async (ctx) => {
     const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
     const customEmojiId = resolveCustomEmojiId(prod);
-    const icon = getButtonIcon(prod.icon || prod.emoji || prod.id, prod.name) || '📦';
-    const label = `${icon} ${prod.name} - ${priceDisplay}`;
+    const label = `${prod.name} - ${priceDisplay}`;
 
     const btnObj = {
       text: label,
@@ -853,9 +872,9 @@ async function renderProductDetail(ctx, prodId, quantity = 1, isEdit = true) {
   const balanceAfter = userBalance - totalPrice;
   const shortfall = totalPrice - userBalance;
 
-  const prodIcon = getButtonIcon(product.icon || product.emoji, product.name);
+  const imgPreview = (product.icon && String(product.icon).startsWith('http')) ? `[\u200D](${product.icon})` : '';
 
-  let text = `${prodIcon ? `${prodIcon} ` : '📦 '}*${product.name}*\n` +
+  let text = `${imgPreview}*${product.name}*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Description:*\n${product.description || 'Premium digital product with 30-day automated replacement warranty.'}\n\n` +
     `📊 *Order Specifications:*\n` +
@@ -932,12 +951,12 @@ async function renderProductDetail(ctx, prodId, quantity = 1, isEdit = true) {
 
   if (isEdit) {
     try {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup, link_preview_options: { is_disabled: false, prefer_small_media: true } });
     } catch {
-      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup, link_preview_options: { is_disabled: false, prefer_small_media: true } });
     }
   } else {
-    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+    await ctx.reply(text, { parse_mode: 'Markdown', reply_markup, link_preview_options: { is_disabled: false, prefer_small_media: true } });
   }
 }
 
@@ -1348,10 +1367,8 @@ bot.callbackQuery('wallet_deposit', async (ctx) => {
 
   gateways.forEach((gw) => {
     const customEmojiId = resolveCustomEmojiId(gw);
-    const gwIcon = getButtonIcon(gw.icon || gw.emoji || gw.id, gw.name) || '🪙';
-    const label = `${gwIcon} ${gw.name}`;
     const btnObj = {
-      text: label,
+      text: gw.name,
       callback_data: `gate_${gw.id}`,
       style: 'primary',
     };
@@ -1390,11 +1407,12 @@ bot.callbackQuery(/^gate_(.+)$/, async (ctx) => {
 
   const rows = [];
 
-  const gwIcon = getButtonIcon(gw.icon || gw.emoji || gw.id, gw.name) || '🪙';
+  const customEmojiId = resolveCustomEmojiId(gw);
+  const imgPreview = (gw.icon && String(gw.icon).startsWith('http')) ? `[\u200D](${gw.icon})` : '';
 
   if (gw.type === 'uid') {
     // Image 3 Format: Binance Pay / Bybit Pay
-    const text = `${gwIcon} *USDT Deposit via ${gw.name}*\n\n` +
+    const text = `${imgPreview}*USDT Deposit via ${gw.name}*\n\n` +
       `💎 *Min Deposit:* ${gw.minDeposit || '0.01 USDT'}\n` +
       `💎 *Max Deposit:* ${gw.maxDeposit || '5.00 USDT'}\n\n` +
       `Please send any amount within the limit to our ${gw.name} UID:\n\n` +
@@ -1428,13 +1446,13 @@ bot.callbackQuery(/^gate_(.+)$/, async (ctx) => {
 
     const reply_markup = createStyledKeyboard(rows);
     try {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup, link_preview_options: { is_disabled: false, prefer_small_media: true } });
     } catch {
-      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup, link_preview_options: { is_disabled: false, prefer_small_media: true } });
     }
   } else {
     // Image 2 Format: Crypto Address (BEP20, Polygon, TON, LTC, etc.)
-    const text = `${gwIcon} *${gw.currency || 'USDT'} Deposit via ${gw.network || 'BSC (BEP20)'}*\n\n` +
+    const text = `${imgPreview}*${gw.currency || 'USDT'} Deposit via ${gw.network || 'BSC (BEP20)'}*\n\n` +
       `💎 *Min Deposit:* ${gw.minDeposit || '0.01 USDT'}\n` +
       `💎 *Max Deposit:* ${gw.maxDeposit || '10000.00 USDT'}\n\n` +
       `Send any amount of ${gw.currency || 'USDT'} (${gw.network || 'BEP20'}) to your personal deposit address below:\n\n` +
@@ -1467,9 +1485,9 @@ bot.callbackQuery(/^gate_(.+)$/, async (ctx) => {
 
     const reply_markup = createStyledKeyboard(rows);
     try {
-      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup, link_preview_options: { is_disabled: false, prefer_small_media: true } });
     } catch {
-      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup, link_preview_options: { is_disabled: false, prefer_small_media: true } });
     }
   }
 });
