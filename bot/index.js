@@ -365,29 +365,13 @@ const BRAND_ICON_MAP = {
 function getButtonIcon(icon, fallbackName = '') {
   const clean = String(icon || '').trim();
 
-  // 0. Image URL / emoji.gg URL check (from emoji.gg/packs/crypto)
-  if (clean.startsWith('http://') || clean.startsWith('https://')) {
-    const lowerUrl = clean.toLowerCase();
-    if (lowerUrl.includes('usdt') || lowerUrl.includes('tether')) return '🟢';
-    if (lowerUrl.includes('bitcoin') || lowerUrl.includes('btc')) return '₿';
-    if (lowerUrl.includes('eth') || lowerUrl.includes('ethereum')) return 'Ξ';
-    if (lowerUrl.includes('binance') || lowerUrl.includes('bnb')) return '🔸';
-    if (lowerUrl.includes('solana') || lowerUrl.includes('sol')) return '🟣';
-    if (lowerUrl.includes('ltc') || lowerUrl.includes('litecoin')) return 'Ł';
-    if (lowerUrl.includes('trx') || lowerUrl.includes('tron')) return '🔴';
-    if (lowerUrl.includes('doge')) return '🐕';
-    if (lowerUrl.includes('pepe')) return '🐸';
-    if (lowerUrl.includes('xrp')) return '✖️';
-    if (lowerUrl.includes('avalanche') || lowerUrl.includes('avax')) return '🔺';
-    if (lowerUrl.includes('monero')) return '🔒';
-    if (lowerUrl.includes('wallet') || lowerUrl.includes('crypto')) return '💎';
-    if (lowerUrl.includes('paypal')) return '🅿️';
-    if (lowerUrl.includes('cashapp')) return '💵';
-    if (lowerUrl.includes('stripe')) return '💳';
-  }
-
-  // 1. Direct Emoji Check (single emoji character or unicode symbol)
+  // 1. Direct Emoji Check (single emoji character or unicode symbol e.g. 🟢, 🔸, 🟡, 💎, ✨, 🤖, 🎬)
   if (clean && !clean.startsWith('<') && !clean.startsWith('http')) {
+    const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u;
+    if (emojiRegex.test(clean)) {
+      const match = clean.match(emojiRegex);
+      if (match) return match[0];
+    }
     const lowerKey = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (BRAND_ICON_MAP[lowerKey]) {
       return BRAND_ICON_MAP[lowerKey];
@@ -397,19 +381,22 @@ function getButtonIcon(icon, fallbackName = '') {
         return emoji;
       }
     }
-    // Check if it's already an emoji (e.g. 🤖, 🎬, ✨, 💎, 🔥, ⚡, 👑)
-    const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u;
-    if (emojiRegex.test(clean)) {
-      const match = clean.match(emojiRegex);
-      if (match) return match[0];
-      return clean;
-    }
-    if (clean.length <= 2) {
+    if (clean.length <= 4) {
       return clean;
     }
   }
 
-  // 2. If raw SVG XML was pasted into admin panel (<svg ...>)
+  // 2. Image URL / emoji.gg URL check (from emoji.gg/packs/crypto or any CDN)
+  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.includes('emoji.gg') || clean.includes('.png')) {
+    const lowerUrl = clean.toLowerCase();
+    for (const [key, emoji] of Object.entries(BRAND_ICON_MAP)) {
+      if (lowerUrl.includes(key)) {
+        return emoji;
+      }
+    }
+  }
+
+  // 3. If raw SVG XML was pasted into admin panel (<svg ...>)
   if (clean.startsWith('<svg') || clean.startsWith('<?xml') || clean.includes('<path')) {
     const lowerSvg = clean.toLowerCase();
     for (const [key, emoji] of Object.entries(BRAND_ICON_MAP)) {
@@ -419,7 +406,7 @@ function getButtonIcon(icon, fallbackName = '') {
     }
   }
 
-  // 3. Fallback: Automatically detect brand icon from the product or gateway name!
+  // 4. Fallback: Automatically detect brand icon from the item name!
   if (fallbackName) {
     const lowerName = String(fallbackName).toLowerCase();
     for (const [key, emoji] of Object.entries(BRAND_ICON_MAP)) {
@@ -429,7 +416,7 @@ function getButtonIcon(icon, fallbackName = '') {
     }
   }
 
-  return clean && clean.length <= 4 ? clean : '✨';
+  return '🪙';
 }
 
 // Built-in Verified Telegram Custom Emoji IDs for Real Brand Logos
@@ -803,8 +790,8 @@ bot.callbackQuery('menu_shop', async (ctx) => {
     const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
     const customEmojiId = resolveCustomEmojiId(prod);
-    const icon = customEmojiId ? '' : getButtonIcon(prod.icon || prod.emoji, prod.name);
-    const label = `${icon ? `${icon} ` : ''}${prod.name} - ${priceDisplay}`;
+    const icon = getButtonIcon(prod.icon || prod.emoji || prod.id, prod.name) || '📦';
+    const label = `${icon} ${prod.name} - ${priceDisplay}`;
 
     const btnObj = {
       text: label,
@@ -1361,9 +1348,10 @@ bot.callbackQuery('wallet_deposit', async (ctx) => {
 
   gateways.forEach((gw) => {
     const customEmojiId = resolveCustomEmojiId(gw);
-    const gwIcon = customEmojiId ? '' : (getButtonIcon(gw.icon || gw.id, gw.name) || '🪙');
+    const gwIcon = getButtonIcon(gw.icon || gw.emoji || gw.id, gw.name) || '🪙';
+    const label = `${gwIcon} ${gw.name}`;
     const btnObj = {
-      text: customEmojiId ? gw.name : `${gwIcon ? `${gwIcon} ` : ''}${gw.name}`,
+      text: label,
       callback_data: `gate_${gw.id}`,
       style: 'primary',
     };
@@ -1402,9 +1390,11 @@ bot.callbackQuery(/^gate_(.+)$/, async (ctx) => {
 
   const rows = [];
 
+  const gwIcon = getButtonIcon(gw.icon || gw.emoji || gw.id, gw.name) || '🪙';
+
   if (gw.type === 'uid') {
     // Image 3 Format: Binance Pay / Bybit Pay
-    const text = `${gw.icon || '🔸'} *USDT Deposit via ${gw.name}*\n\n` +
+    const text = `${gwIcon} *USDT Deposit via ${gw.name}*\n\n` +
       `💎 *Min Deposit:* ${gw.minDeposit || '0.01 USDT'}\n` +
       `💎 *Max Deposit:* ${gw.maxDeposit || '5.00 USDT'}\n\n` +
       `Please send any amount within the limit to our ${gw.name} UID:\n\n` +
@@ -1444,7 +1434,7 @@ bot.callbackQuery(/^gate_(.+)$/, async (ctx) => {
     }
   } else {
     // Image 2 Format: Crypto Address (BEP20, Polygon, TON, LTC, etc.)
-    const text = `${gw.icon || '🔸'} *${gw.currency || 'USDT'} Deposit via ${gw.network || 'BSC (BEP20)'}*\n\n` +
+    const text = `${gwIcon} *${gw.currency || 'USDT'} Deposit via ${gw.network || 'BSC (BEP20)'}*\n\n` +
       `💎 *Min Deposit:* ${gw.minDeposit || '0.01 USDT'}\n` +
       `💎 *Max Deposit:* ${gw.maxDeposit || '10000.00 USDT'}\n\n` +
       `Send any amount of ${gw.currency || 'USDT'} (${gw.network || 'BEP20'}) to your personal deposit address below:\n\n` +
