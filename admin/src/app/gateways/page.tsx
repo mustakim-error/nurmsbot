@@ -24,6 +24,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { verifyOnChainTx } from '@/lib/cryptoVerifier';
+import { BRAND_PRESETS, BrandIcon } from '@/lib/brandIcons';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -81,7 +82,7 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
   {
     id: 'usdt-bep20',
     name: 'USDT (BEP20)',
-    icon: '🔸',
+    icon: 'usdt',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'BSC (BEP20)',
@@ -95,7 +96,7 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
   {
     id: 'usdt-polygon',
     name: 'USDT (Polygon)',
-    icon: '🟣',
+    icon: 'polygon',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'Polygon',
@@ -109,7 +110,7 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
   {
     id: 'usdt-ton',
     name: 'USDT (Ton)',
-    icon: '💎',
+    icon: 'ton',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'TON',
@@ -123,7 +124,7 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
   {
     id: 'ton-ton',
     name: 'Ton (Ton)',
-    icon: '💎',
+    icon: 'ton',
     type: 'crypto_address',
     currency: 'TON',
     network: 'TON',
@@ -137,7 +138,7 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
   {
     id: 'binance-pay',
     name: 'Binance Pay',
-    icon: '🔸',
+    icon: 'binance',
     type: 'uid',
     currency: 'USDT',
     network: 'Binance Pay',
@@ -153,7 +154,7 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
   {
     id: 'bybit-pay',
     name: 'Bybit Pay',
-    icon: '🟡',
+    icon: 'bybit',
     type: 'uid',
     currency: 'USDT',
     network: 'Bybit UID',
@@ -169,7 +170,7 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
   {
     id: 'ltc',
     name: 'LTC (Litecoin)',
-    icon: 'Ł',
+    icon: 'ltc',
     type: 'crypto_address',
     currency: 'LTC',
     network: 'Litecoin',
@@ -192,7 +193,7 @@ export default function GatewaysPage() {
   const [editingGateway, setEditingGateway] = useState<PaymentGateway | null>(null);
   const [gatewayForm, setGatewayForm] = useState<Partial<PaymentGateway>>({
     name: '',
-    icon: '🔸',
+    icon: 'binance',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'BSC (BEP20)',
@@ -308,7 +309,7 @@ export default function GatewaysPage() {
     setEditingGateway(null);
     setGatewayForm({
       name: 'USDT (BEP20)',
-      icon: '🔸',
+      icon: 'usdt',
       type: 'crypto_address',
       currency: 'USDT',
       network: 'BSC (BEP20)',
@@ -803,11 +804,15 @@ export default function GatewaysPage() {
                   <TableRow key={gw.id}>
                     <TableCell className="font-mono text-muted-foreground text-xs">{gw.order || idx + 1}</TableCell>
                     <TableCell>
-                      <div className="font-semibold text-white text-xs flex items-center gap-1.5">
-                        <span className="text-base">{gw.icon}</span>
-                        {gw.name}
+                      <div className="font-semibold text-white text-xs flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-secondary/60 border border-border/70 flex items-center justify-center shrink-0">
+                          <BrandIcon icon={gw.icon || gw.id} className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <span>{gw.name}</span>
+                          <div className="text-[11px] text-muted-foreground font-mono font-normal">{gw.network}</div>
+                        </div>
                       </div>
-                      <div className="text-[11px] text-muted-foreground font-mono">{gw.network}</div>
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="font-mono text-[11px]">
@@ -885,8 +890,42 @@ export default function GatewaysPage() {
           </DialogHeader>
 
           <form onSubmit={handleSaveGateway} className="space-y-4 py-2 text-xs">
-            <div className="grid grid-cols-4 gap-2">
-              <div className="col-span-3">
+            {/* Official Crypto & Gateway SVG Brand Presets */}
+            <div>
+              <label className="block font-medium text-foreground mb-1.5 text-[11px] text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                <span>⚡ Official SVG Payment Brand Logos (1-Click Fill)</span>
+                <span className="text-primary font-mono text-[10px]">Pure Vector SVG</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-2 rounded-lg bg-secondary/30 border border-border/70">
+                {BRAND_PRESETS.filter(bp => bp.category === 'Crypto' || ['telegram', 'discord'].includes(bp.id)).map((bp) => {
+                  const isSelected = gatewayForm.icon === bp.id;
+                  return (
+                    <button
+                      key={bp.id}
+                      type="button"
+                      onClick={() => {
+                        setGatewayForm({
+                          ...gatewayForm,
+                          name: gatewayForm.name ? gatewayForm.name : bp.name,
+                          icon: bp.id,
+                        });
+                      }}
+                      className={`inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-left text-xs font-medium transition-all ${
+                        isSelected 
+                          ? 'bg-primary/20 border-primary text-white shadow-sm shadow-primary/20' 
+                          : 'bg-card/70 hover:bg-secondary/80 border-border/60 text-muted-foreground hover:text-white'
+                      }`}
+                    >
+                      <BrandIcon icon={bp.id} className="w-4 h-4 shrink-0 text-primary" />
+                      <span className="truncate">{bp.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <div className="sm:col-span-3">
                 <label className="block font-medium text-foreground mb-1">Gateway Name</label>
                 <Input
                   required
@@ -896,12 +935,18 @@ export default function GatewaysPage() {
                 />
               </div>
               <div>
-                <label className="block font-medium text-foreground mb-1">Icon / Emoji</label>
-                <Input
-                  placeholder="e.g. 🔸"
-                  value={gatewayForm.icon}
-                  onChange={(e) => setGatewayForm({ ...gatewayForm, icon: e.target.value })}
-                />
+                <label className="block font-medium text-foreground mb-1">SVG Key / Code</label>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-9 h-9 rounded-md bg-secondary/60 border border-border/70 flex items-center justify-center shrink-0">
+                    <BrandIcon icon={gatewayForm.icon} className="w-5 h-5 text-primary" />
+                  </div>
+                  <Input
+                    placeholder="e.g. binance, usdt, <svg..."
+                    value={gatewayForm.icon}
+                    onChange={(e) => setGatewayForm({ ...gatewayForm, icon: e.target.value })}
+                    className="font-mono text-xs"
+                  />
+                </div>
               </div>
             </div>
 

@@ -166,12 +166,48 @@ async function recordTransaction(txData) {
   }
 }
 
+// SVG Brand Presets to Telegram Button Label Icon Resolver
+const PRESET_UNICODE_MAP = {
+  netflix: '🎬',
+  spotify: '🎧',
+  chatgpt: '🤖',
+  youtube: '▶️',
+  telegram: '⭐',
+  discord: '👾',
+  binance: '🔸',
+  bybit: '🟡',
+  usdt: '💵',
+  ton: '💎',
+  polygon: '🟣',
+  ltc: 'Ł',
+  btc: '₿',
+  eth: 'Ξ',
+  canva: '🎨',
+  prime: '📦',
+  github: '🐙',
+  nordvpn: '🛡️',
+  apple: '🍏',
+};
+
+function getButtonIcon(icon) {
+  if (!icon) return '';
+  const trimmed = String(icon).trim();
+  if (trimmed.startsWith('<svg') || trimmed.startsWith('<?xml') || trimmed.startsWith('http')) {
+    return '✨';
+  }
+  const lower = trimmed.toLowerCase();
+  if (PRESET_UNICODE_MAP[lower]) {
+    return PRESET_UNICODE_MAP[lower];
+  }
+  return trimmed;
+}
+
 // Default Presets for Payment Gateways
 const DEFAULT_GATEWAYS = [
   {
     id: 'usdt-bep20',
     name: 'USDT (BEP20)',
-    icon: '🔸',
+    icon: 'usdt',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'BSC (BEP20)',
@@ -184,7 +220,7 @@ const DEFAULT_GATEWAYS = [
   {
     id: 'usdt-polygon',
     name: 'USDT (Polygon)',
-    icon: '🟣',
+    icon: 'polygon',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'Polygon',
@@ -197,7 +233,7 @@ const DEFAULT_GATEWAYS = [
   {
     id: 'usdt-ton',
     name: 'USDT (Ton)',
-    icon: '💎',
+    icon: 'ton',
     type: 'crypto_address',
     currency: 'USDT',
     network: 'TON',
@@ -210,7 +246,7 @@ const DEFAULT_GATEWAYS = [
   {
     id: 'ton-ton',
     name: 'Ton (Ton)',
-    icon: '💎',
+    icon: 'ton',
     type: 'crypto_address',
     currency: 'TON',
     network: 'TON',
@@ -223,7 +259,7 @@ const DEFAULT_GATEWAYS = [
   {
     id: 'binance-pay',
     name: 'Binance Pay',
-    icon: '🔸',
+    icon: 'binance',
     type: 'uid',
     currency: 'USDT',
     network: 'Binance Pay',
@@ -238,7 +274,7 @@ const DEFAULT_GATEWAYS = [
   {
     id: 'bybit-pay',
     name: 'Bybit Pay',
-    icon: '🟡',
+    icon: 'bybit',
     type: 'uid',
     currency: 'USDT',
     network: 'Bybit UID',
@@ -253,7 +289,7 @@ const DEFAULT_GATEWAYS = [
   {
     id: 'ltc',
     name: 'LTC (Litecoin)',
-    icon: 'Ł',
+    icon: 'ltc',
     type: 'crypto_address',
     currency: 'LTC',
     network: 'Litecoin',
@@ -431,7 +467,7 @@ bot.callbackQuery('menu_shop', async (ctx) => {
   products.forEach((prod) => {
     const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
-    const icon = prod.icon || '';
+    const icon = getButtonIcon(prod.icon);
     const label = `${icon ? `${icon} ` : ''}${prod.name} - ${priceDisplay}`;
 
     rows.push([
@@ -935,9 +971,10 @@ bot.callbackQuery('wallet_deposit', async (ctx) => {
   const rows = [];
 
   gateways.forEach((gw) => {
+    const gwIcon = getButtonIcon(gw.icon || gw.id) || '🪙';
     rows.push([
       {
-        text: `${gw.icon || '🪙'} ${gw.name}`,
+        text: `${gwIcon} ${gw.name}`,
         callback_data: `gate_${gw.id}`,
         style: 'primary',
       },

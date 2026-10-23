@@ -15,12 +15,15 @@ import {
   Activity,
   Zap,
   Coins,
-  ArrowLeftRight
+  ArrowLeftRight,
+  LogOut,
+  ShieldCheck
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { rtdb } from '@/lib/firebase';
 import { ref, onValue } from 'firebase/database';
+import { useAuth } from '@/context/AuthContext';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -35,6 +38,7 @@ const navigation = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
   const [botOnline, setBotOnline] = useState<boolean | null>(null);
   const [pendingDeposits, setPendingDeposits] = useState<number>(0);
 
@@ -135,22 +139,44 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      {/* Footer Info & Quick Link */}
-      <div className="pt-4 border-t space-y-2">
-        <div className="p-3 rounded-lg border bg-secondary/40 space-y-2">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
-              <span className={cn(
-                "w-2 h-2 rounded-full",
-                botOnline ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-amber-500"
-              )} />
-              {botOnline === null ? 'Checking Bot...' : botOnline ? 'Bot Online 24/7' : 'Bot Idle / Standby'}
-            </span>
-            <Zap className={cn("w-3.5 h-3.5", botOnline ? "text-emerald-400" : "text-amber-400")} />
+      {/* Footer Info & Admin Profile Card */}
+      <div className="pt-3 border-t space-y-2.5">
+        {/* Bot Live Pulse */}
+        <div className="p-2 rounded-lg border bg-secondary/30 flex items-center justify-between text-xs">
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-foreground">
+            <span className={cn(
+              "w-2 h-2 rounded-full",
+              botOnline ? "bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]" : "bg-amber-500"
+            )} />
+            {botOnline === null ? 'Checking Bot...' : botOnline ? 'Bot Online 24/7' : 'Bot Standby'}
+          </span>
+          <Zap className={cn("w-3 h-3", botOnline ? "text-emerald-400" : "text-amber-400")} />
+        </div>
+
+        {/* Logged in Admin Profile & Logout */}
+        <div className="p-2.5 rounded-lg border border-border/70 bg-card/60 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 overflow-hidden">
+            <div className="w-7 h-7 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shrink-0">
+              <ShieldCheck className="w-4 h-4" />
+            </div>
+            <div className="overflow-hidden">
+              <p className="text-xs font-semibold text-white truncate max-w-[110px]" title={user?.email || 'admin@nurms.com'}>
+                {user?.email?.split('@')[0] || 'Admin'}
+              </p>
+              <p className="text-[10px] text-emerald-400 font-mono leading-none">Super Admin</p>
+            </div>
           </div>
-          <p className="text-[11px] text-muted-foreground/80 leading-relaxed font-mono">
-            {botOnline ? 'Heartbeat verified • Realtime' : 'Waiting for cron/Render ping'}
-          </p>
+          <button
+            onClick={() => {
+              if (confirm('Log out from Admin Portal?')) {
+                logout();
+              }
+            }}
+            className="text-muted-foreground hover:text-rose-400 p-1.5 rounded hover:bg-rose-500/10 transition-colors shrink-0"
+            title="Log Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </aside>

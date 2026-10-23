@@ -1,0 +1,50 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    "products": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "gateways": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "status": {
+      ".read": true,
+      ".write": true
+    },
+    "settings": {
+      "bot_config": {
+        ".read": true,
+        ".write": "auth != null"
+      },
+      "admin_auth": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "deposits": {
+      ".read": true,
+      ".write": true
+    },
+    "orders": {
+      ".read": true,
+      ".write": true
+    },
+    "transactions": {
+      ".read": true,
+      ".write": true
+    },
+    "processed_txs": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}

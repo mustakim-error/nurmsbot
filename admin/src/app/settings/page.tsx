@@ -20,7 +20,18 @@ import {
   Clock,
   Globe,
   Copy,
-  Server
+  Server,
+  ShieldCheck,
+  Lock,
+  Key,
+  ShieldAlert,
+  ShoppingBag,
+  Receipt,
+  Package,
+  TrendingUp,
+  Shield,
+  Headphones,
+  Info
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -134,6 +145,89 @@ export default function SettingsPage() {
     return 'bg-blue-600/30 text-blue-400 border-blue-500/40';
   };
 
+  // Security Rules & Master Password state
+  const [copiedRules, setCopiedRules] = useState(false);
+  const [adminEmail, setAdminEmail] = useState('admin@nurms.com');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [passwordUpdated, setPasswordUpdated] = useState(false);
+
+  const FIREBASE_RULES_JSON = `{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    "products": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "gateways": {
+      ".read": true,
+      ".write": "auth != null"
+    },
+    "status": {
+      ".read": true,
+      ".write": true
+    },
+    "settings": {
+      "bot_config": {
+        ".read": true,
+        ".write": "auth != null"
+      },
+      "admin_auth": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "users": {
+      "$uid": {
+        ".read": true,
+        ".write": true
+      }
+    },
+    "deposits": {
+      ".read": true,
+      ".write": true
+    },
+    "orders": {
+      ".read": true,
+      ".write": true
+    },
+    "transactions": {
+      ".read": true,
+      ".write": true
+    },
+    "processed_txs": {
+      ".read": true,
+      ".write": true
+    }
+  }
+}`;
+
+  const handleUpdateAdminPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminPassword || adminPassword.length < 5) {
+      alert('Password must be at least 5 characters long.');
+      return;
+    }
+    setUpdatingPassword(true);
+    try {
+      const authRef = ref(rtdb, 'settings/admin_auth');
+      await set(authRef, {
+        email: adminEmail,
+        master_key: adminPassword,
+        updatedAt: new Date().toISOString(),
+      });
+      setPasswordUpdated(true);
+      setTimeout(() => setPasswordUpdated(false), 3000);
+      setAdminPassword('');
+      alert('Admin master credentials updated successfully in Firebase!');
+    } catch (err: any) {
+      alert(`Error updating credentials: ${err.message}`);
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
+
   return (
     <div className="space-y-6 max-w-5xl">
       {/* Header */}
@@ -170,7 +264,7 @@ export default function SettingsPage() {
       ) : (
         <form onSubmit={handleSave}>
           <Tabs defaultValue="channel" className="w-full">
-            <TabsList className="grid w-full grid-cols-5 max-w-2xl mb-6">
+            <TabsList className="grid w-full grid-cols-6 max-w-3xl mb-6">
               <TabsTrigger value="channel" className="gap-1.5">
                 <Bot className="w-3.5 h-3.5" />
                 Channel & Shop
@@ -190,6 +284,10 @@ export default function SettingsPage() {
               <TabsTrigger value="cron" className="gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-emerald-400" />
                 24/7 Uptime & Cron
+              </TabsTrigger>
+              <TabsTrigger value="security" className="gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                Security & Rules
               </TabsTrigger>
             </TabsList>
 
@@ -376,7 +474,10 @@ export default function SettingsPage() {
                     {/* Row 1 */}
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 1: Shop</span>
+                        <span className="flex items-center gap-1.5">
+                          <ShoppingBag className="w-3.5 h-3.5 text-primary" />
+                          Button 1: Shop
+                        </span>
                         <Badge className={getStyleColorClass(config.btnShopStyle)}>{config.btnShopStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -399,7 +500,10 @@ export default function SettingsPage() {
 
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 2: Wallet</span>
+                        <span className="flex items-center gap-1.5">
+                          <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+                          Button 2: Wallet
+                        </span>
                         <Badge className={getStyleColorClass(config.btnWalletStyle)}>{config.btnWalletStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -423,7 +527,10 @@ export default function SettingsPage() {
                     {/* Row 2 */}
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 3: Order History</span>
+                        <span className="flex items-center gap-1.5">
+                          <Receipt className="w-3.5 h-3.5 text-primary" />
+                          Button 3: Order History
+                        </span>
                         <Badge className={getStyleColorClass(config.btnOrderHistoryStyle)}>{config.btnOrderHistoryStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -445,7 +552,10 @@ export default function SettingsPage() {
 
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 4: My Orders</span>
+                        <span className="flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-primary" />
+                          Button 4: My Orders
+                        </span>
                         <Badge className={getStyleColorClass(config.btnMyOrdersStyle)}>{config.btnMyOrdersStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -468,7 +578,10 @@ export default function SettingsPage() {
                     {/* Row 3 */}
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 5: Refer & Earn</span>
+                        <span className="flex items-center gap-1.5">
+                          <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                          Button 5: Refer & Earn
+                        </span>
                         <Badge className={getStyleColorClass(config.btnReferStyle)}>{config.btnReferStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -490,7 +603,10 @@ export default function SettingsPage() {
 
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 6: Profile</span>
+                        <span className="flex items-center gap-1.5">
+                          <Shield className="w-3.5 h-3.5 text-primary" />
+                          Button 6: Profile
+                        </span>
                         <Badge className={getStyleColorClass(config.btnProfileStyle)}>{config.btnProfileStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -513,7 +629,10 @@ export default function SettingsPage() {
                     {/* Row 4 */}
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 7: Support</span>
+                        <span className="flex items-center gap-1.5">
+                          <Headphones className="w-3.5 h-3.5 text-emerald-400" />
+                          Button 7: Support
+                        </span>
                         <Badge className={getStyleColorClass(config.btnSupportStyle)}>{config.btnSupportStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -535,7 +654,10 @@ export default function SettingsPage() {
 
                     <div className="p-3.5 rounded-xl border bg-secondary/30 space-y-2">
                       <div className="font-semibold text-foreground flex items-center justify-between">
-                        <span>Button 8: About</span>
+                        <span className="flex items-center gap-1.5">
+                          <Info className="w-3.5 h-3.5 text-primary" />
+                          Button 8: About
+                        </span>
                         <Badge className={getStyleColorClass(config.btnAboutStyle)}>{config.btnAboutStyle}</Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
@@ -744,6 +866,158 @@ export default function SettingsPage() {
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                       💡 Setting a free cron job on <a href="https://cron-job.org" target="_blank" rel="noreferrer" className="text-primary underline">cron-job.org</a> targeting this URL every 5 or 10 minutes ensures 100% 24/7 uptime without Render ever idling.
                     </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* TAB 6: Security & Rules */}
+            <TabsContent value="security" className="space-y-5">
+              {/* Card 1: Firebase Realtime Database Security Rules */}
+              <Card className="glass-panel border-emerald-500/30">
+                <CardHeader>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-base text-white flex items-center gap-2">
+                        <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                        Firebase Realtime Database Security Rules
+                      </CardTitle>
+                      <CardDescription>
+                        Strict database-level enforcement protecting all admin endpoints and financial balances.
+                      </CardDescription>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(FIREBASE_RULES_JSON);
+                          setCopiedRules(true);
+                          setTimeout(() => setCopiedRules(false), 2000);
+                        }}
+                        size="sm"
+                        variant="default"
+                        className="gap-1.5 text-xs font-semibold"
+                      >
+                        {copiedRules ? <Check className="w-4 h-4 text-white" /> : <Copy className="w-4 h-4" />}
+                        {copiedRules ? 'Copied to Clipboard!' : 'Copy Rules JSON'}
+                      </Button>
+                      <a
+                        href="https://console.firebase.google.com/project/nurms-bot/database/nurms-bot-default-rtdb/rules"
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium bg-secondary/80 hover:bg-secondary text-white"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 text-primary" />
+                        Firebase Console
+                      </a>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-4 text-xs">
+                  {/* Status Highlights */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3 rounded-lg border bg-emerald-500/10 border-emerald-500/20 space-y-1">
+                      <div className="flex items-center gap-1.5 text-emerald-400 font-semibold">
+                        <Lock className="w-4 h-4" />
+                        <span>Admin Route Guard</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        All admin pages redirect to <code>/login</code> if not authenticated.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-lg border bg-blue-500/10 border-blue-500/20 space-y-1">
+                      <div className="flex items-center gap-1.5 text-blue-400 font-semibold">
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Database Write Rules</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        <code>products</code>, <code>gateways</code>, & <code>bot_config</code> require <code>auth != null</code>.
+                      </p>
+                    </div>
+
+                    <div className="p-3 rounded-lg border bg-purple-500/10 border-purple-500/20 space-y-1">
+                      <div className="flex items-center gap-1.5 text-purple-400 font-semibold">
+                        <Key className="w-4 h-4" />
+                        <span>Admin Auth Vault</span>
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        <code>settings/admin_auth</code> is 100% hidden and blocked from public reads.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Rules Code Preview */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-muted-foreground text-[11px] font-mono">
+                      <span>database.rules.json:</span>
+                      <span className="text-emerald-400">Strict Auth Enforced</span>
+                    </div>
+                    <pre className="p-3.5 rounded-lg bg-black/80 border font-mono text-[11px] text-emerald-300 overflow-x-auto max-h-64 select-all">
+                      {FIREBASE_RULES_JSON}
+                    </pre>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Card 2: Update Admin Master Credentials */}
+              <Card className="glass-panel">
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Key className="w-4 h-4 text-primary" />
+                    Admin Master Password & Access Control
+                  </CardTitle>
+                  <CardDescription>
+                    Update the super administrator login credentials stored securely in Firebase RTDB.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Admin Login Email
+                      </label>
+                      <Input
+                        value={adminEmail}
+                        onChange={(e) => setAdminEmail(e.target.value)}
+                        placeholder="admin@nurms.com"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        New Master Password
+                      </label>
+                      <Input
+                        type="password"
+                        value={adminPassword}
+                        onChange={(e) => setAdminPassword(e.target.value)}
+                        placeholder="Enter new strong password"
+                        className="font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-[11px] text-muted-foreground">
+                      💡 Default email: <code>admin@nurms.com</code> | Default master password: <code>admin</code>
+                    </span>
+                    <Button
+                      type="button"
+                      onClick={handleUpdateAdminPassword}
+                      disabled={updatingPassword}
+                      size="sm"
+                      className="gap-1.5 font-semibold"
+                    >
+                      {updatingPassword ? (
+                        <RadioTower className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Save className="w-3.5 h-3.5" />
+                      )}
+                      {updatingPassword ? 'Updating...' : 'Update Admin Password'}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

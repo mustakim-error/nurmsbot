@@ -1,7 +1,8 @@
 import React from 'react';
 import type { Metadata } from 'next';
 import './globals.css';
-import Sidebar from '@/components/Sidebar';
+import { AuthProvider } from '@/context/AuthContext';
+import AdminShell from '@/components/AdminShell';
 
 export const metadata: Metadata = {
   title: 'NURMS Admin Portal | Telegram Store & Bot Manager',
@@ -15,13 +16,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="bg-[#0b0f17] text-gray-100 flex min-h-screen">
-        <Sidebar />
-        <main className="flex-1 p-8 overflow-y-auto max-h-screen">
-          <div className="max-w-6xl mx-auto">
+      <body className="bg-[#0b0f17] text-gray-100 min-h-screen">
+        <AuthProvider>
+          <AdminShell>
             {children}
-          </div>
-        </main>
+          </AdminShell>
+        </AuthProvider>
       </body>
     </html>
   );
