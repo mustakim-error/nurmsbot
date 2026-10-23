@@ -56,6 +56,8 @@ interface PaymentGateway {
   order: number;
   autoApprove?: boolean;
   autoApproveAmount?: number;
+  apiKey?: string;
+  apiSecret?: string;
 }
 
 interface DepositRequest {
@@ -209,8 +211,43 @@ export default function GatewaysPage() {
   const [creditAmount, setCreditAmount] = useState<number>(5.0);
   const [approving, setApproving] = useState(false);
 
+  // Exchange API Test State
+  const [testingApi, setTestingApi] = useState(false);
+  const [apiTestResult, setApiTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // Filter/Search
   const [searchTx, setSearchTx] = useState('');
+
+  // Test Binance / Bybit Connection
+  const handleTestExchangeApi = async () => {
+    if (!gatewayForm.apiKey || !gatewayForm.apiSecret) {
+      alert('Please enter both API Key and API Secret first.');
+      return;
+    }
+    setTestingApi(true);
+    setApiTestResult(null);
+
+    const isBybit = (gatewayForm.id || gatewayForm.name || '').toLowerCase().includes('bybit');
+    const exchangeType = isBybit ? 'bybit' : 'binance';
+
+    try {
+      const res = await fetch('/api/exchange/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          exchange: exchangeType,
+          apiKey: gatewayForm.apiKey,
+          apiSecret: gatewayForm.apiSecret,
+        }),
+      });
+      const data = await res.json();
+      setApiTestResult(data);
+    } catch (err: any) {
+      setApiTestResult({ success: false, message: err.message });
+    } finally {
+      setTestingApi(false);
+    }
+  };
 
   // 1. Sync Gateways and Deposits from Firebase RTDB
   useEffect(() => {
@@ -279,17 +316,25 @@ export default function GatewaysPage() {
       maxDeposit: '10000.00 USDT',
       address: '0xAfCdaAfA2e75A543B2A120c31a05708982Bd4b7F',
       uid: '',
+      apiKey: '',
+      apiSecret: '',
       warning: 'Only send USDT on BEP20 (BSC) network.',
       active: true,
       order: gateways.length + 1,
     });
+    setApiTestResult(null);
     setIsGatewayDialogOpen(true);
   };
 
   // Open Gateway Edit
   const handleOpenEdit = (gw: PaymentGateway) => {
     setEditingGateway(gw);
-    setGatewayForm({ ...gw });
+    setGatewayForm({
+      ...gw,
+      apiKey: gw.apiKey || '',
+      apiSecret: gw.apiSecret || '',
+    });
+    setApiTestResult(null);
     setIsGatewayDialogOpen(true);
   };
 
@@ -313,6 +358,8 @@ export default function GatewaysPage() {
         maxDeposit: gatewayForm.maxDeposit || '10000.00 USDT',
         address: gatewayForm.address || '',
         uid: gatewayForm.uid || '',
+        apiKey: gatewayForm.apiKey || '',
+        apiSecret: gatewayForm.apiSecret || '',
         warning: gatewayForm.warning || '',
         active: gatewayForm.active !== undefined ? gatewayForm.active : true,
         order: Number(gatewayForm.order) || 1,
@@ -349,57 +396,97 @@ export default function GatewaysPage() {
     setIsApproveDialogOpen(true);
   };
 
-  // State for on-chain live check
+  // State for live check
   const [checkingDepId, setCheckingDepId] = useState<string | null>(null);
 
-  // Auto Check On-Chain Transaction for Pending Deposit
-  const handleAutoCheckOnChain = async (dep: DepositRequest) => {
-    const targetGateway = gateways.find((g) => g.id === dep.gatewayId) || {
+  // Auto Check Deposit (Blockchain or Exchange Read-Only API)
+  const handleAutoCheckDeposit = async (dep: DepositRequest) => {
+    const targetGateway: Partial<PaymentGateway> = gateways.find((g) => g.id === dep.gatewayId) || {
       id: dep.gatewayId,
+      name: dep.gatewayName,
       network: 'BSC (BEP20)',
       address: '0xAfCdaAfA2e75A543B2A120c31a05708982Bd4b7F',
+      apiKey: '',
+      apiSecret: '',
     };
     setCheckingDepId(dep.id);
 
     try {
-      const result = await verifyOnChainTx(targetGateway, dep.txId);
-      if (result.verified) {
-        const verifiedAmount = result.amount || 1.0;
-        if (confirm(`⚡ Blockchain Verified Successfully!\n\nNetwork: ${(result.chain || 'BSC').toUpperCase()}\nCredited Amount: $${verifiedAmount.toFixed(2)} USDT\n\nCredit $${verifiedAmount.toFixed(2)} to ${dep.userName} (${dep.userId}) now?`)) {
-          const userRef = ref(rtdb, `users/${dep.userId}`);
-          const userSnap = await (await import('firebase/database')).get(userRef);
-          const userData = userSnap.exists() ? userSnap.val() : { balance: 0 };
-          const currentBalance = Number(userData.balance || 0);
-          const newBalance = currentBalance + verifiedAmount;
-
-          await update(userRef, { balance: newBalance, updatedAt: new Date().toISOString() });
-          await update(ref(rtdb, `deposits/${dep.id}`), {
-            status: 'approved',
-            amount: verifiedAmount,
-            creditedBalance: newBalance,
-            autoVerified: true,
-            method: 'onchain_auto',
-            chain: result.chain,
-            updatedAt: new Date().toISOString(),
-          });
-
-          const safeTxKey = dep.txId.toLowerCase().replace(/[^a-z0-9]/g, '_');
-          await set(ref(rtdb, `processed_txs/${safeTxKey}`), {
-            txId: dep.txId,
-            userId: dep.userId,
-            amount: verifiedAmount,
-            verifiedAt: new Date().toISOString(),
-            method: 'onchain_auto',
-          });
+      if (dep.txId.startsWith('0x')) {
+        // 1. Blockchain On-Chain Check
+        const result = await verifyOnChainTx(targetGateway, dep.txId);
+        if (result.verified) {
+          const verifiedAmount = result.amount || 1.0;
+          if (confirm(`⚡ Blockchain Verified Successfully!\n\nNetwork: ${(result.chain || 'BSC').toUpperCase()}\nCredited Amount: $${verifiedAmount.toFixed(2)} USDT\n\nCredit $${verifiedAmount.toFixed(2)} to ${dep.userName} (${dep.userId}) now?`)) {
+            await approveAndCredit(dep, verifiedAmount, 'onchain_auto', result.chain);
+          }
+        } else {
+          alert(`⚠️ On-Chain Verification Notice:\n${result.reason || 'Could not verify transaction on blockchain.'}`);
         }
       } else {
-        alert(`⚠️ On-Chain Verification Notice:\n${result.reason || 'Could not verify transaction on blockchain.'}`);
+        // 2. Binance or Bybit Read-Only API Check
+        const isBybit = (targetGateway.id || targetGateway.name || '').toLowerCase().includes('bybit');
+        const exchangeType = isBybit ? 'bybit' : 'binance';
+
+        if (!targetGateway.apiKey || !targetGateway.apiSecret) {
+          alert(`⚠️ ${isBybit ? 'Bybit' : 'Binance'} Read-Only API is not configured on this gateway yet.\n\nPlease edit this gateway, add your Read-Only API Key & Secret, and click Save.`);
+          return;
+        }
+
+        const res = await fetch('/api/exchange/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            exchange: exchangeType,
+            apiKey: targetGateway.apiKey || '',
+            apiSecret: targetGateway.apiSecret || '',
+            txId: dep.txId,
+          }),
+        });
+        const result = await res.json();
+
+        if (result.verified) {
+          const verifiedAmount = result.amount || 1.0;
+          if (confirm(`⚡ ${result.exchange || 'Exchange'} Confirmed Successfully!\n\nOrder / Transfer ID: ${result.orderId}\nCredited Amount: $${verifiedAmount.toFixed(2)} ${result.currency || 'USDT'}\n\nCredit $${verifiedAmount.toFixed(2)} to ${dep.userName} (${dep.userId}) now?`)) {
+            await approveAndCredit(dep, verifiedAmount, isBybit ? 'bybit_api' : 'binance_api', exchangeType);
+          }
+        } else {
+          alert(`⚠️ Exchange Verification Notice:\n${result.reason || 'Payment was not found in exchange records.'}`);
+        }
       }
     } catch (err: any) {
       alert(`Auto-check error: ${err.message}`);
     } finally {
       setCheckingDepId(null);
     }
+  };
+
+  const approveAndCredit = async (dep: DepositRequest, amountToAdd: number, method: string, chainOrEx?: string) => {
+    const userRef = ref(rtdb, `users/${dep.userId}`);
+    const userSnap = await (await import('firebase/database')).get(userRef);
+    const userData = userSnap.exists() ? userSnap.val() : { balance: 0 };
+    const currentBalance = Number(userData.balance || 0);
+    const newBalance = currentBalance + amountToAdd;
+
+    await update(userRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+    await update(ref(rtdb, `deposits/${dep.id}`), {
+      status: 'approved',
+      amount: amountToAdd,
+      creditedBalance: newBalance,
+      autoVerified: true,
+      method: method,
+      chain: chainOrEx,
+      updatedAt: new Date().toISOString(),
+    });
+
+    const safeTxKey = dep.txId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+    await set(ref(rtdb, `processed_txs/${safeTxKey}`), {
+      txId: dep.txId,
+      userId: dep.userId,
+      amount: amountToAdd,
+      verifiedAt: new Date().toISOString(),
+      method: method,
+    });
   };
 
   // Confirm Deposit Approval & Credit Balance to User
@@ -608,23 +695,21 @@ export default function GatewaysPage() {
                       <TableCell className="text-right">
                         {dep.status === 'pending' ? (
                           <div className="flex items-center justify-end gap-1.5">
-                            {dep.txId.startsWith('0x') && (
-                              <Button
-                                onClick={() => handleAutoCheckOnChain(dep)}
-                                disabled={checkingDepId === dep.id}
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-xs font-semibold gap-1 border-primary/40 text-primary hover:bg-primary/10"
-                                title="Run automated blockchain verification for this hash"
-                              >
-                                {checkingDepId === dep.id ? (
-                                  <RefreshCw className="w-3 h-3 animate-spin" />
-                                ) : (
-                                  <Zap className="w-3 h-3" />
-                                )}
-                                Auto-Check
-                              </Button>
-                            )}
+                            <Button
+                              onClick={() => handleAutoCheckDeposit(dep)}
+                              disabled={checkingDepId === dep.id}
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs font-semibold gap-1 border-primary/40 text-primary hover:bg-primary/10"
+                              title={dep.txId.startsWith('0x') ? 'Verify on Blockchain network' : 'Verify via Exchange Read-Only API'}
+                            >
+                              {checkingDepId === dep.id ? (
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Zap className="w-3 h-3" />
+                              )}
+                              Auto-Check
+                            </Button>
                             <Button
                               onClick={() => handleOpenApprove(dep)}
                               size="sm"
@@ -816,16 +901,83 @@ export default function GatewaysPage() {
             </div>
 
             {gatewayForm.type === 'uid' ? (
-              <div>
-                <label className="block font-medium text-foreground mb-1 text-amber-300">
-                  Binance / Bybit UID Number
-                </label>
-                <Input
-                  required
-                  placeholder="e.g. 1233668018"
-                  value={gatewayForm.uid}
-                  onChange={(e) => setGatewayForm({ ...gatewayForm, uid: e.target.value })}
-                />
+              <div className="space-y-3">
+                <div>
+                  <label className="block font-medium text-foreground mb-1 text-amber-300">
+                    Binance / Bybit UID Number
+                  </label>
+                  <Input
+                    required
+                    placeholder="e.g. 1233668018"
+                    value={gatewayForm.uid}
+                    onChange={(e) => setGatewayForm({ ...gatewayForm, uid: e.target.value })}
+                  />
+                </div>
+
+                {/* Exchange Read-Only API Integration Card */}
+                <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-amber-400" />
+                      <span className="font-semibold text-white text-xs">
+                        {(gatewayForm.name || '').includes('Bybit') ? 'Bybit' : 'Binance'} Read-Only API Integration
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 font-mono">
+                      ⚡ 100% Automated
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Connect your Read-Only API (No withdrawal permissions allowed/required). The bot verifies payments automatically 24/7 on the exchange!
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-medium text-foreground mb-1">
+                        API Key (Read-Only)
+                      </label>
+                      <Input
+                        type="password"
+                        placeholder="Paste Read-Only API Key..."
+                        value={gatewayForm.apiKey || ''}
+                        onChange={(e) => setGatewayForm({ ...gatewayForm, apiKey: e.target.value })}
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-foreground mb-1">
+                        API Secret Key
+                      </label>
+                      <Input
+                        type="password"
+                        placeholder="Paste API Secret..."
+                        value={gatewayForm.apiSecret || ''}
+                        onChange={(e) => setGatewayForm({ ...gatewayForm, apiSecret: e.target.value })}
+                        className="h-8 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={testingApi || !gatewayForm.apiKey || !gatewayForm.apiSecret}
+                      onClick={handleTestExchangeApi}
+                      className="h-7 text-xs gap-1 border-amber-500/30 hover:bg-amber-500/10 text-amber-300"
+                    >
+                      {testingApi ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                      Test API Connection
+                    </Button>
+
+                    {apiTestResult && (
+                      <span className={`text-[11px] font-medium ${apiTestResult.success ? 'text-emerald-400' : 'text-destructive'}`}>
+                        {apiTestResult.success ? '✅ ' + apiTestResult.message : '❌ ' + apiTestResult.message}
+                      </span>
+                    )}
+                  </div>
+                </div>
               </div>
             ) : (
               <div>

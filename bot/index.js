@@ -4,6 +4,7 @@ const express = require('express');
 const { rtdb } = require('./firebase');
 const { ref, get, set, update, onValue } = require('firebase/database');
 const { verifyOnChainTx } = require('./cryptoVerifier');
+const { verifyBinancePayment, verifyBybitPayment } = require('./exchangeVerifier');
 
 // Default Token embedded so Render needs zero configuration!
 const defaultToken = '8711373245:AAHZMSBwkhKrNjsyj5yQRYdw0E2YgVvpzWk';
@@ -906,8 +907,164 @@ bot.on('message:text', async (ctx) => {
       }
     }
 
-    // 3. Automated UID Verification (Binance Pay / Bybit Pay) if autoApprove is enabled
-    if (gw && gw.type === 'uid' && gw.autoApprove) {
+    // 3. Automated Binance Pay Read-Only API Verification
+    if (gw && (gw.id === 'binance-pay' || (gw.network && gw.network.toLowerCase().includes('binance')))) {
+      if (gw.apiKey && gw.apiSecret) {
+        const waitNotice = await ctx.reply('🔍 *Verifying payment with Binance Read-Only API...*', { parse_mode: 'Markdown' });
+        try {
+          const binanceResult = await verifyBinancePayment(gw.apiKey, gw.apiSecret, txId);
+          try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
+
+          if (binanceResult && binanceResult.verified) {
+            const creditedAmount = binanceResult.amount || 1.0;
+            const userSnap = await get(ref(rtdb, `users/${userId}`));
+            const currentBal = Number(userSnap.val()?.balance || 0);
+            const newBal = currentBal + creditedAmount;
+
+            await update(ref(rtdb, `users/${userId}`), {
+              balance: newBal,
+              updatedAt: new Date().toISOString(),
+            });
+
+            await set(ref(rtdb, `deposits/${depId}`), {
+              ...depositData,
+              status: 'approved',
+              amount: creditedAmount,
+              creditedBalance: newBal,
+              autoVerified: true,
+              method: 'binance_api',
+              payer: binanceResult.payer || '',
+              updatedAt: new Date().toISOString(),
+            });
+
+            await set(processedRef, {
+              txId: txId,
+              userId: String(userId),
+              amount: creditedAmount,
+              gatewayId: gatewayId,
+              verifiedAt: new Date().toISOString(),
+              method: 'binance_api',
+            });
+
+            const successMsg = `⚡ *Binance Pay Confirmed Automatically!*\n\n` +
+              `💎 *Gateway:* *Binance Pay*\n` +
+              `💰 *Amount Credited:* *$${creditedAmount.toFixed(2)} ${binanceResult.currency || 'USDT'}*\n` +
+              `🪙 *New Wallet Balance:* *$${newBal.toFixed(2)}*\n` +
+              `📌 *Order ID / TxID:*\n\`${txId}\`\n\n` +
+              `🎉 Payment verified via Binance Read-Only API in real-time! Your balance is ready for shopping.`;
+
+            const reply_markup = createStyledKeyboard([
+              [{ text: '🛒 Browse Shop', callback_data: 'menu_shop', style: 'success' }],
+              [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+              [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+            ]);
+
+            return ctx.reply(successMsg, { parse_mode: 'Markdown', reply_markup });
+          } else {
+            await set(ref(rtdb, `deposits/${depId}`), {
+              ...depositData,
+              note: binanceResult.reason || 'Not matched on Binance API',
+            });
+
+            const pendingMsg = `⏳ *Payment Queued for Verification*\n\n` +
+              `💎 *Gateway:* *${gatewayName}*\n` +
+              `📌 *Order ID:* \`${txId}\`\n\n` +
+              `🔍 *Status:* ${binanceResult.reason || 'Pending verification'}\n\n` +
+              `✅ Sent to our admin panel for live 1-click confirmation. Your balance will be credited shortly!`;
+
+            const reply_markup = createStyledKeyboard([
+              [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+              [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+            ]);
+
+            return ctx.reply(pendingMsg, { parse_mode: 'Markdown', reply_markup });
+          }
+        } catch (err) {
+          console.error('Binance API check failed:', err.message);
+        }
+      }
+    }
+
+    // 4. Automated Bybit Pay Read-Only API Verification
+    if (gw && (gw.id === 'bybit-pay' || (gw.network && gw.network.toLowerCase().includes('bybit')))) {
+      if (gw.apiKey && gw.apiSecret) {
+        const waitNotice = await ctx.reply('🔍 *Verifying transfer with Bybit Read-Only API...*', { parse_mode: 'Markdown' });
+        try {
+          const bybitResult = await verifyBybitPayment(gw.apiKey, gw.apiSecret, txId);
+          try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
+
+          if (bybitResult && bybitResult.verified) {
+            const creditedAmount = bybitResult.amount || 1.0;
+            const userSnap = await get(ref(rtdb, `users/${userId}`));
+            const currentBal = Number(userSnap.val()?.balance || 0);
+            const newBal = currentBal + creditedAmount;
+
+            await update(ref(rtdb, `users/${userId}`), {
+              balance: newBal,
+              updatedAt: new Date().toISOString(),
+            });
+
+            await set(ref(rtdb, `deposits/${depId}`), {
+              ...depositData,
+              status: 'approved',
+              amount: creditedAmount,
+              creditedBalance: newBal,
+              autoVerified: true,
+              method: 'bybit_api',
+              senderUid: bybitResult.senderUid || '',
+              updatedAt: new Date().toISOString(),
+            });
+
+            await set(processedRef, {
+              txId: txId,
+              userId: String(userId),
+              amount: creditedAmount,
+              gatewayId: gatewayId,
+              verifiedAt: new Date().toISOString(),
+              method: 'bybit_api',
+            });
+
+            const successMsg = `⚡ *Bybit Transfer Confirmed Automatically!*\n\n` +
+              `💎 *Gateway:* *Bybit Pay*\n` +
+              `💰 *Amount Credited:* *$${creditedAmount.toFixed(2)} ${bybitResult.currency || 'USDT'}*\n` +
+              `🪙 *New Wallet Balance:* *$${newBal.toFixed(2)}*\n` +
+              `📌 *Transfer ID / TxID:*\n\`${txId}\`\n\n` +
+              `🎉 Payment verified via Bybit Read-Only API in real-time! Your balance is ready for shopping.`;
+
+            const reply_markup = createStyledKeyboard([
+              [{ text: '🛒 Browse Shop', callback_data: 'menu_shop', style: 'success' }],
+              [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+              [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+            ]);
+
+            return ctx.reply(successMsg, { parse_mode: 'Markdown', reply_markup });
+          } else {
+            await set(ref(rtdb, `deposits/${depId}`), {
+              ...depositData,
+              note: bybitResult.reason || 'Not matched on Bybit API',
+            });
+
+            const pendingMsg = `⏳ *Payment Queued for Verification*\n\n` +
+              `💎 *Gateway:* *${gatewayName}*\n` +
+              `📌 *Transfer ID:* \`${txId}\`\n\n` +
+              `🔍 *Status:* ${bybitResult.reason || 'Pending verification'}\n\n` +
+              `✅ Sent to our admin panel for live 1-click confirmation. Your balance will be credited shortly!`;
+
+            const reply_markup = createStyledKeyboard([
+              [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+              [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+            ]);
+
+            return ctx.reply(pendingMsg, { parse_mode: 'Markdown', reply_markup });
+          }
+        } catch (err) {
+          console.error('Bybit API check failed:', err.message);
+        }
+      }
+    }
+
+    // 5. Fallback Instant Auto-Approve if API key is not configured but autoApprove is enabled
+    if (gw && gw.type === 'uid' && gw.autoApprove && !gw.apiKey) {
       // Validate order ID / transfer ID format (16-20 digits)
       const isValidOrderId = /^\d{16,20}$/.test(txId);
       if (isValidOrderId) {
