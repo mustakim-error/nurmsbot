@@ -48,6 +48,10 @@
       ".read": true,
       ".write": true
     },
+    "referrals": {
+      ".read": true,
+      ".write": true
+    },
     "processed_txs": {
       ".read": true,
       ".write": true

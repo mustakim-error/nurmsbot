@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { rtdb } from '@/lib/firebase';
 import { ref, onValue, update } from 'firebase/database';
-import { Users, DollarSign, Wallet, Search, ArrowUpRight, Plus, Minus, UserCheck, RadioTower } from 'lucide-react';
+import { Users, DollarSign, Wallet, Search, ArrowUpRight, Plus, Minus, UserCheck, RadioTower, Gift, UserPlus, Sparkles, TrendingUp } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,9 @@ interface TelegramUser {
   name: string;
   username?: string;
   balance: number;
+  referralCount?: number;
+  referralEarnings?: number;
+  referredBy?: string;
   createdAt?: string;
 }
 
@@ -77,6 +80,10 @@ export default function UsersPage() {
     u.telegram_id.includes(search)
   );
 
+  const totalBalance = users.reduce((acc, u) => acc + Number(u.balance || 0), 0);
+  const totalReferrals = users.reduce((acc, u) => acc + Number(u.referralCount || 0), 0);
+  const totalCommission = users.reduce((acc, u) => acc + Number(u.referralEarnings || 0), 0);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -87,7 +94,7 @@ export default function UsersPage() {
             Registered Users & Wallets
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Credit or deduct wallet balances manually after receiving payments (bKash / Nagad / Binance).
+            Monitor registered members, live wallet balances, and referral earnings.
           </p>
         </div>
 
@@ -101,6 +108,49 @@ export default function UsersPage() {
             className="pl-9 h-9 text-xs"
           />
         </div>
+      </div>
+
+      {/* Summary KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="glass-panel p-4 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
+            <Users className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] text-muted-foreground">Total Members</div>
+            <div className="text-lg font-bold text-white">{users.length}</div>
+          </div>
+        </Card>
+
+        <Card className="glass-panel p-4 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-emerald-500/10 text-emerald-400">
+            <Wallet className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] text-muted-foreground">Total Wallet Balances</div>
+            <div className="text-lg font-bold text-emerald-400">${totalBalance.toFixed(2)}</div>
+          </div>
+        </Card>
+
+        <Card className="glass-panel p-4 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-blue-500/10 text-blue-400">
+            <UserPlus className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] text-muted-foreground">Referral Joins</div>
+            <div className="text-lg font-bold text-blue-400">{totalReferrals} users</div>
+          </div>
+        </Card>
+
+        <Card className="glass-panel p-4 flex items-center gap-3">
+          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-400">
+            <Gift className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="text-[11px] text-muted-foreground">Commission Distributed</div>
+            <div className="text-lg font-bold text-amber-400">${totalCommission.toFixed(2)}</div>
+          </div>
+        </Card>
       </div>
 
       {/* Users Table Card */}
@@ -127,6 +177,8 @@ export default function UsersPage() {
                 <TableHead>Customer</TableHead>
                 <TableHead>Telegram ID</TableHead>
                 <TableHead>Wallet Balance</TableHead>
+                <TableHead>Referrals</TableHead>
+                <TableHead>Referred By</TableHead>
                 <TableHead>Joined</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -148,6 +200,24 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell className="font-mono font-bold text-primary">
                     ${Number(u.balance || 0).toFixed(2)}
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
+                      <UserPlus className="w-3 h-3 text-muted-foreground" />
+                      <span>{u.referralCount || 0}</span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        (${Number(u.referralEarnings || 0).toFixed(2)})
+                      </span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-xs">
+                    {u.referredBy ? (
+                      <Badge variant="outline" className="text-[10px] font-mono text-amber-300 border-amber-500/30 bg-amber-500/10">
+                        UID: {u.referredBy}
+                      </Badge>
+                    ) : (
+                      <span className="text-muted-foreground text-[11px]">Direct</span>
+                    )}
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground">
                     {u.createdAt ? u.createdAt.slice(0, 10) : 'Active'}

@@ -33,7 +33,10 @@ import {
   Headphones,
   Info,
   Plus,
-  Trash2
+  Trash2,
+  Users,
+  Gift,
+  Share2
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
@@ -60,6 +63,12 @@ export default function SettingsPage() {
     bkashNumber: '01XXXXXXXXX',
     nagadNumber: '01XXXXXXXXX',
     binancePayId: '12345678',
+
+    // Referral Program & Commission
+    enableReferralReward: true,
+    referralCommission: 0.10, // $0.10 USD bonus per join
+    referralWelcomeBonus: 0.00,
+    referralPurchaseCommissionPercent: 0,
 
     // Customizable Bot Messages (A to Z)
     forceSubMessage: '👋 Hey! {name} Please Join our Official channel to access this bot ❗',
@@ -286,7 +295,7 @@ export default function SettingsPage() {
       ) : (
         <form onSubmit={handleSave}>
           <Tabs defaultValue="channel" className="w-full">
-            <TabsList className="grid w-full grid-cols-6 max-w-3xl mb-6">
+            <TabsList className="grid w-full grid-cols-7 max-w-4xl mb-6">
               <TabsTrigger value="channel" className="gap-1.5">
                 <Bot className="w-3.5 h-3.5" />
                 Channel & Shop
@@ -302,6 +311,10 @@ export default function SettingsPage() {
               <TabsTrigger value="payments" className="gap-1.5">
                 <Wallet className="w-3.5 h-3.5" />
                 Payments
+              </TabsTrigger>
+              <TabsTrigger value="referrals" className="gap-1.5">
+                <Gift className="w-3.5 h-3.5 text-primary" />
+                Referrals & Bonus
               </TabsTrigger>
               <TabsTrigger value="cron" className="gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-emerald-400" />
@@ -759,6 +772,110 @@ export default function SettingsPage() {
                       placeholder="e.g. 123456789 or T9yD14Nj9y..."
                       className="font-mono"
                     />
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* TAB: Referrals & Bonus */}
+            <TabsContent value="referrals" className="space-y-5">
+              <Card className="glass-panel border-primary/20 bg-primary/5">
+                <CardHeader>
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <Gift className="w-4 h-4 text-primary" />
+                    Telegram Referral & Join Commission Program
+                  </CardTitle>
+                  <CardDescription>
+                    Configure automatic wallet commissions rewarded when new users join via referral links (&apos;https://t.me/&lt;bot&gt;?start=&lt;user_id&gt;&apos;).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-xs">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Referral Program Status
+                      </label>
+                      <select
+                        value={config.enableReferralReward !== false ? 'true' : 'false'}
+                        onChange={(e) => setConfig({ ...config, enableReferralReward: e.target.value === 'true' })}
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <option value="true">✅ Enabled (Reward Users on Referral Join)</option>
+                        <option value="false">❌ Disabled</option>
+                      </select>
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Turn on or pause the automatic referral bonus system across the entire bot.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Join Commission ($ USD per new user)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={config.referralCommission ?? 0.10}
+                        onChange={(e) => setConfig({ ...config, referralCommission: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.10"
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Amount credited to the referrer&apos;s wallet balance immediately when a friend starts the bot.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-border/50">
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Welcome Bonus for New User ($ USD)
+                      </label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={config.referralWelcomeBonus ?? 0.00}
+                        onChange={(e) => setConfig({ ...config, referralWelcomeBonus: parseFloat(e.target.value) || 0 })}
+                        placeholder="0.00"
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Optional bonus given to the new user who joined using a referral link (Set 0.00 for none).
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-foreground mb-1">
+                        Purchase Commission Percentage (%)
+                      </label>
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="100"
+                        value={config.referralPurchaseCommissionPercent ?? 0}
+                        onChange={(e) => setConfig({ ...config, referralPurchaseCommissionPercent: parseFloat(e.target.value) || 0 })}
+                        placeholder="0"
+                        className="font-mono text-xs"
+                      />
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Optional % bonus given to the referrer whenever their invited friend buys a product.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Informational Guidance Box */}
+                  <div className="p-3.5 rounded-lg border border-primary/20 bg-primary/10 text-xs space-y-1.5">
+                    <div className="font-semibold text-white flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-primary" />
+                      <span>How Telegram Referral Deep-Linking Works:</span>
+                    </div>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Every user gets their unique link: <code className="text-primary font-mono select-all">https://t.me/{config.botLink?.replace('@', '') || 'YourBot'}?start=&lt;telegram_id&gt;</code>.
+                      When a friend clicks the link and starts the bot, the system automatically checks if they are a new user, records the referral in Firebase, updates the referrer&apos;s balance, records a ledger transaction, and sends an instant Telegram notification!
+                    </p>
                   </div>
                 </CardContent>
               </Card>

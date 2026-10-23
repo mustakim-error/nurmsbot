@@ -56,6 +56,12 @@ let botConfig = {
   btnSupportStyle: 'success',
   btnAboutText: 'ℹ️ About',
   btnAboutStyle: 'primary',
+
+  // Referral Program & Commission
+  enableReferralReward: true,
+  referralCommission: 0.10, // $0.10 USD bonus per referred user who joins the bot
+  referralWelcomeBonus: 0.00, // Optional welcome bonus for the joining user
+  referralPurchaseCommissionPercent: 0, // Optional % commission on referred user purchases
 };
 
 // Sync settings dynamically from Firebase Realtime Database
@@ -87,8 +93,8 @@ function formatText(template, variables = {}) {
   return result;
 }
 
-// Helper: Get or Create User in Firebase RTDB
-async function getUser(userId, userInfo = {}) {
+// Helper: Get or Create User in Firebase RTDB with Instant Referral Join Commission
+async function getUser(userId, userInfo = {}, referrerId = null, ctx = null) {
   const userRef = ref(rtdb, `users/${userId}`);
   const snap = await get(userRef);
 
@@ -98,9 +104,97 @@ async function getUser(userId, userInfo = {}) {
       name: userInfo.first_name || 'User',
       username: userInfo.username || '',
       balance: 0.0,
+      referralCount: 0,
+      referralEarnings: 0.0,
+      referredBy: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
+    // Process Referral Bonus if valid referrer is provided
+    if (referrerId && String(referrerId) !== String(userId)) {
+      try {
+        const cleanRefId = String(referrerId);
+        const refUserRef = ref(rtdb, `users/${cleanRefId}`);
+        const refSnap = await get(refUserRef);
+
+        if (refSnap.exists()) {
+          const referrerData = refSnap.val();
+          newUser.referredBy = cleanRefId;
+
+          const commission = Number(botConfig.referralCommission ?? 0.10);
+          const isEnabled = botConfig.enableReferralReward !== false;
+
+          if (isEnabled && commission > 0) {
+            const updatedRefBalance = Number((Number(referrerData.balance || 0) + commission).toFixed(2));
+            const updatedRefCount = Number(referrerData.referralCount || 0) + 1;
+            const updatedRefEarnings = Number((Number(referrerData.referralEarnings || 0) + commission).toFixed(2));
+
+            // 1. Credit Referrer's Wallet & Referral Stats
+            await update(refUserRef, {
+              balance: updatedRefBalance,
+              referralCount: updatedRefCount,
+              referralEarnings: updatedRefEarnings,
+              updatedAt: new Date().toISOString(),
+            });
+
+            // 2. Record in referrals ledger
+            await set(ref(rtdb, `referrals/${cleanRefId}/${userId}`), {
+              telegram_id: String(userId),
+              name: userInfo.first_name || 'Member',
+              username: userInfo.username || '',
+              commission: commission,
+              joinedAt: new Date().toISOString(),
+            });
+
+            // 3. Record Financial Ledger Transaction
+            await recordTransaction({
+              type: 'referral_bonus',
+              userId: cleanRefId,
+              userName: referrerData.name || 'Referrer',
+              amount: commission,
+              balanceAfter: updatedRefBalance,
+              note: `Referral join bonus: invited ${userInfo.first_name || 'Member'} (${userId})`,
+            });
+
+            // 4. Send Instant Realtime Notification to Referrer
+            if (ctx && ctx.api) {
+              try {
+                await ctx.api.sendMessage(
+                  cleanRefId,
+                  `🎉 *New Referral Join Bonus!*\n\n` +
+                  `👤 *${userInfo.first_name || 'A new friend'}* just joined using your referral link!\n\n` +
+                  `💰 *Commission Earned:* +$${commission.toFixed(2)}\n` +
+                  `🪙 *Updated Wallet Balance:* $${updatedRefBalance.toFixed(2)}\n` +
+                  `👥 *Total Referrals:* ${updatedRefCount}\n\n` +
+                  `_Keep sharing your link to earn unlimited wallet balance!_`,
+                  { parse_mode: 'Markdown' }
+                );
+              } catch (notifyErr) {
+                console.warn(`Could not send referral notification to ${cleanRefId}:`, notifyErr.message);
+              }
+            }
+          }
+
+          // Optional welcome bonus for joining user
+          const welcomeBonus = Number(botConfig.referralWelcomeBonus || 0);
+          if (isEnabled && welcomeBonus > 0) {
+            newUser.balance = welcomeBonus;
+            await recordTransaction({
+              type: 'welcome_bonus',
+              userId: String(userId),
+              userName: newUser.name,
+              amount: welcomeBonus,
+              balanceAfter: welcomeBonus,
+              note: `Welcome bonus for joining via referral (${cleanRefId})`,
+            });
+          }
+        }
+      } catch (refErr) {
+        console.error('Error processing referral bonus in RTDB:', refErr.message);
+      }
+    }
+
     await set(userRef, newUser);
     return newUser;
   }
@@ -341,8 +435,18 @@ bot.command('start', async (ctx) => {
   const userId = ctx.from.id;
   const firstName = ctx.from.first_name || 'Member';
 
-  // Ensure user exists in Firebase
-  const user = await getUser(userId, ctx.from);
+  // Parse referral payload from deep-link (e.g. /start 123456 or /start ref_123456)
+  const rawPayload = ctx.match || (ctx.message?.text ? ctx.message.text.split(' ')[1] : '');
+  let referrerId = null;
+  if (rawPayload) {
+    const cleaned = String(rawPayload).replace(/^ref_/, '').trim();
+    if (/^\d+$/.test(cleaned) && cleaned !== String(userId)) {
+      referrerId = cleaned;
+    }
+  }
+
+  // Ensure user exists in Firebase & handle referral join commission
+  const user = await getUser(userId, ctx.from, referrerId, ctx);
 
   // Check channel subscription
   const joined = await isChannelMember(ctx, userId);
@@ -796,6 +900,53 @@ bot.callbackQuery(/^buy_([^_]+)(?:_(\d+))?$/, async (ctx) => {
     balanceAfter: newBalance,
     note: `Purchase: ${product.name} (x${qty})`,
   });
+
+  // 5.1 Reward Referrer with Purchase Commission (if user was referred & commission > 0)
+  if (user.referredBy && Number(botConfig.referralPurchaseCommissionPercent || 0) > 0) {
+    const pct = Number(botConfig.referralPurchaseCommissionPercent);
+    const purchaseBonus = Number(((totalPrice * pct) / 100).toFixed(2));
+    if (purchaseBonus > 0) {
+      try {
+        const refUserRef = ref(rtdb, `users/${user.referredBy}`);
+        const refUserSnap = await get(refUserRef);
+        if (refUserSnap.exists()) {
+          const refUser = refUserSnap.val();
+          const newRefBal = Number((Number(refUser.balance || 0) + purchaseBonus).toFixed(2));
+          const newRefEarn = Number((Number(refUser.referralEarnings || 0) + purchaseBonus).toFixed(2));
+
+          await update(refUserRef, {
+            balance: newRefBal,
+            referralEarnings: newRefEarn,
+            updatedAt: new Date().toISOString(),
+          });
+
+          await recordTransaction({
+            type: 'referral_purchase_bonus',
+            userId: String(user.referredBy),
+            userName: refUser.name || 'Referrer',
+            amount: purchaseBonus,
+            balanceAfter: newRefBal,
+            note: `${pct}% Purchase commission from ${user.name}'s order (${formattedOrderId})`,
+          });
+
+          try {
+            await ctx.api.sendMessage(
+              user.referredBy,
+              `💸 *Referral Purchase Commission!*\n\n` +
+              `Your friend *${user.name}* just completed a purchase of *$${totalPrice.toFixed(2)}*!\n\n` +
+              `🎁 *Your Bonus (${pct}%):* +$${purchaseBonus.toFixed(2)}\n` +
+              `🪙 *New Wallet Balance:* $${newRefBal.toFixed(2)}`,
+              { parse_mode: 'Markdown' }
+            );
+          } catch (notifErr) {
+            console.warn(`Could not notify referrer of purchase commission:`, notifErr.message);
+          }
+        }
+      } catch (err) {
+        console.warn('Purchase referral commission error:', err.message);
+      }
+    }
+  }
 
   // 6. Deliver Ultra-Slick Digital Receipt with Monospace Credentials
   const successText = `🎉 *PURCHASE SUCCESSFUL!*\n\n` +
@@ -1649,10 +1800,19 @@ bot.callbackQuery('menu_profile', async (ctx) => {
   const userId = ctx.from.id;
   const user = await getUser(userId, ctx.from);
 
-  const text = `🛡️ *User Profile*\n\n👤 Name: *${user.name}*\n🆔 Telegram ID: \`${userId}\`\n💰 Balance: *$${Number(user.balance || 0).toFixed(2)}*\n📅 Member Since: *${user.createdAt ? user.createdAt.slice(0, 10) : 'Active'}*`;
+  const text = `🛡️ *User Profile*\n\n` +
+    `👤 Name: *${user.name}*\n` +
+    `🆔 Telegram ID: \`${userId}\`\n` +
+    `💰 Wallet Balance: *$${Number(user.balance || 0).toFixed(2)}*\n` +
+    `👥 Friends Referred: *${user.referralCount || 0} users*\n` +
+    `💸 Referral Bonus Earned: *$${Number(user.referralEarnings || 0).toFixed(2)}*\n` +
+    `📅 Member Since: *${user.createdAt ? user.createdAt.slice(0, 10) : 'Active'}*`;
 
   const reply_markup = createStyledKeyboard([
-    [{ text: '💰 Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+    [
+      { text: '💰 Wallet', callback_data: 'menu_wallet', style: 'primary' },
+      { text: '💸 Refer & Earn', callback_data: 'menu_refer', style: 'success' },
+    ],
     [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
   ]);
 
@@ -1663,15 +1823,37 @@ bot.callbackQuery('menu_profile', async (ctx) => {
   }
 });
 
-// 11. Refer & Earn Handler
+// 11. Refer & Earn Handler with Instant Join Commission
 bot.callbackQuery('menu_refer', async (ctx) => {
   await ctx.answerCallbackQuery();
+  const userId = ctx.from.id;
+  const user = await getUser(userId, ctx.from);
   const botInfo = await ctx.api.getMe();
-  const refLink = `https://t.me/${botInfo.username}?start=${ctx.from.id}`;
+  const refLink = `https://t.me/${botInfo.username}?start=${userId}`;
 
-  const text = `💸 *Refer & Earn Program*\n\nShare your referral link with friends and earn bonus wallet balance on every purchase they make!\n\n🔗 *Your Referral Link:*\n\`${refLink}\``;
+  const commission = Number(botConfig.referralCommission ?? 0.10).toFixed(2);
+  const totalReferrals = Number(user.referralCount || 0);
+  const totalEarnings = Number(user.referralEarnings || 0).toFixed(2);
+  const shopName = botConfig.shopName || 'our store';
+
+  const text = `💸 *Refer & Earn Program*\n\n` +
+    `Invite your friends and earn real wallet balance! Whenever a new friend starts this bot through your referral link, you receive *+$${commission}* instant wallet bonus!\n\n` +
+    `🔗 *Your Unique Referral Link:*\n\`${refLink}\`\n\n` +
+    `📊 *Your Referral Statistics:*\n` +
+    `👥 *Friends Invited:* *${totalReferrals} users*\n` +
+    `💰 *Total Bonus Earned:* *$${totalEarnings}*\n` +
+    `🎁 *Commission Per Join:* *$${commission}*\n\n` +
+    `💡 *How to Earn:*\n` +
+    `1. Tap *Share Referral Link* below or copy your link.\n` +
+    `2. Share it on Telegram channels, groups, or directly with friends.\n` +
+    `3. When they join, your bonus is credited instantly!`;
+
+  const shareText = `Join ${shopName} to buy digital accounts, subscriptions, and services with instant delivery! 🎁 Use my referral link:`;
+  const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(refLink)}&text=${encodeURIComponent(shareText)}`;
 
   const reply_markup = createStyledKeyboard([
+    [{ text: '🚀 Share Referral Link', url: shareUrl, style: 'success' }],
+    [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
     [{ text: '◀️ Back to Menu', callback_data: 'back_to_menu', style: 'primary' }],
   ]);
 
