@@ -13,7 +13,8 @@ import {
   Search,
   CheckCircle2,
   XCircle,
-  RadioTower
+  RadioTower,
+  Coins
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,7 @@ import {
   DialogDescription, 
   DialogFooter 
 } from '@/components/ui/dialog';
-import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji, VERIFIED_CUSTOM_EMOJIS } from '@/lib/brandIcons';
+import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji, VERIFIED_CUSTOM_EMOJIS, EMOJI_GG_CRYPTO_PACK } from '@/lib/brandIcons';
 
 interface Product {
   id: string;
@@ -307,13 +308,54 @@ export default function ProductsPage() {
           </DialogHeader>
 
           <form onSubmit={handleSave} className="space-y-4 py-2 text-xs">
+            {/* Official Crypto Emoji Pack (from https://emoji.gg/packs/crypto) */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-secondary/30 border border-border/70">
+              <label className="block font-medium text-foreground text-[11px] text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-white font-semibold">
+                  <Coins className="w-3.5 h-3.5 text-primary" />
+                  Official Crypto Emoji Pack (emoji.gg)
+                </span>
+                <span className="text-primary font-mono text-[10px]">1-Click Quick Fill</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-40 overflow-y-auto p-1.5 rounded-lg bg-card/60 border border-border/60 scrollbar-thin">
+                {EMOJI_GG_CRYPTO_PACK.map((coin) => {
+                  const isSelected = formData.icon === coin.imageUrl || formData.icon === coin.id;
+                  return (
+                    <button
+                      key={coin.id}
+                      type="button"
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          name: formData.name ? formData.name : coin.name,
+                          icon: coin.imageUrl,
+                          custom_emoji_id: coin.custom_emoji_id || formData.custom_emoji_id,
+                        });
+                      }}
+                      className={`flex items-center gap-2 p-1.5 rounded-lg border text-left transition-all ${
+                        isSelected
+                          ? 'bg-primary/20 border-primary text-white shadow-sm ring-1 ring-primary/40'
+                          : 'bg-secondary/40 hover:bg-secondary/90 border-border/50 text-muted-foreground hover:text-white'
+                      }`}
+                    >
+                      <img src={coin.imageUrl} alt={coin.name} className="w-5 h-5 object-contain shrink-0 rounded" />
+                      <div className="truncate min-w-0">
+                        <div className="text-[11px] font-semibold text-white truncate">{coin.symbol}</div>
+                        <div className="text-[9px] text-muted-foreground truncate">{coin.name}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Official Brand SVG Presets */}
             <div>
               <label className="block font-medium text-foreground mb-1.5 text-[11px] text-muted-foreground uppercase tracking-wider flex items-center justify-between">
                 <span>⚡ Official SVG Brand Logos (1-Click Fill)</span>
                 <span className="text-primary font-mono text-[10px]">Pure Vector SVG</span>
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-36 overflow-y-auto p-2 rounded-lg bg-secondary/30 border border-border/70">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-28 overflow-y-auto p-1.5 rounded-lg bg-secondary/30 border border-border/70 scrollbar-thin">
                 {BRAND_PRESETS.map((bp) => {
                   const isSelected = formData.icon === bp.id;
                   return (
@@ -333,7 +375,7 @@ export default function ProductsPage() {
                           : 'bg-card/70 hover:bg-secondary/80 border-border/60 text-muted-foreground hover:text-white'
                       }`}
                     >
-                      <BrandIcon icon={bp.id} className="w-4 h-4 shrink-0" />
+                      <BrandIcon icon={bp.id} className="w-4 h-4 shrink-0 text-primary" />
                       <span className="truncate">{bp.name}</span>
                     </button>
                   );
@@ -395,12 +437,13 @@ export default function ProductsPage() {
                 <span>Telegram Bot Button Preview</span>
                 <span className="text-emerald-400 font-bold">Native Style</span>
               </div>
-              <div className={`py-2 px-3 rounded-lg text-center font-bold text-xs border shadow-sm transition-all ${
+              <div className={`py-2 px-3 rounded-lg text-center font-bold text-xs border shadow-sm transition-all flex items-center justify-center gap-1.5 ${
                 Number(formData.stock) > 0 
                   ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50' 
                   : 'bg-red-600/30 text-red-300 border-red-500/50'
               }`}>
-                {formData.custom_emoji_id ? '✨ [Custom Vector Logo] ' : `${resolveTelegramButtonEmoji(formData.icon, formData.name)} `}{formData.name || 'Product Title'} - {Number(formData.price) === 0 ? '0' : `$${Number(formData.price).toFixed(2)}`}
+                <BrandIcon icon={formData.icon || formData.name} className="w-4 h-4 shrink-0 inline-block" />
+                <span>{formData.custom_emoji_id ? '✨ [Custom Vector Logo] ' : `${resolveTelegramButtonEmoji(formData.icon, formData.name)} `}{formData.name || 'Product Title'} - {Number(formData.price) === 0 ? '0' : `$${Number(formData.price).toFixed(2)}`}</span>
               </div>
             </div>
 
@@ -453,7 +496,7 @@ export default function ProductsPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block font-medium text-foreground mb-1">Price ($ USD)</label>
                 <Input
@@ -505,23 +548,24 @@ export default function ProductsPage() {
                 id="activeCheck"
                 checked={formData.active}
                 onChange={(e) => setFormData({ ...formData, active: e.target.checked })}
-                className="w-4 h-4 rounded border-input bg-background/50 text-primary focus:ring-primary"
+                className="w-4 h-4 rounded border-input bg-background/50 text-primary focus:ring-primary cursor-pointer"
               />
               <label htmlFor="activeCheck" className="text-foreground font-medium select-none cursor-pointer">
                 Visible & Available for purchase in Telegram Bot
               </label>
             </div>
 
-            <DialogFooter>
+            <DialogFooter className="sticky bottom-0 bg-card/95 backdrop-blur-md pt-3 pb-1 border-t border-border/70 flex flex-col-reverse sm:flex-row gap-2 justify-end z-20">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 onClick={() => setIsDialogOpen(false)}
+                className="w-full sm:w-auto text-xs h-9 sm:h-8"
               >
                 Cancel
               </Button>
-              <Button type="submit" size="sm" className="font-semibold">
+              <Button type="submit" size="sm" className="w-full sm:w-auto font-semibold text-xs h-9 sm:h-8 bg-primary text-black hover:bg-primary/90">
                 Save Product
               </Button>
             </DialogFooter>

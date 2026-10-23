@@ -336,6 +336,18 @@ const BRAND_ICON_MAP = {
   litecoin: 'Ł',
   sol: '🟣',
   solana: '🟣',
+  doge: '🐕',
+  dogecoin: '🐕',
+  pepe: '🐸',
+  xrp: '✖️',
+  ripple: '✖️',
+  monero: '🔒',
+  xmr: '🔒',
+  avax: '🔺',
+  avalanche: '🔺',
+  polkadot: '🔘',
+  dot: '🔘',
+  crypto: '💰',
 
   // Local Mobile Banking & Fiat
   bkash: '🌸',
@@ -352,6 +364,27 @@ const BRAND_ICON_MAP = {
 
 function getButtonIcon(icon, fallbackName = '') {
   const clean = String(icon || '').trim();
+
+  // 0. Image URL / emoji.gg URL check (from emoji.gg/packs/crypto)
+  if (clean.startsWith('http://') || clean.startsWith('https://')) {
+    const lowerUrl = clean.toLowerCase();
+    if (lowerUrl.includes('usdt') || lowerUrl.includes('tether')) return '🟢';
+    if (lowerUrl.includes('bitcoin') || lowerUrl.includes('btc')) return '₿';
+    if (lowerUrl.includes('eth') || lowerUrl.includes('ethereum')) return 'Ξ';
+    if (lowerUrl.includes('binance') || lowerUrl.includes('bnb')) return '🔸';
+    if (lowerUrl.includes('solana') || lowerUrl.includes('sol')) return '🟣';
+    if (lowerUrl.includes('ltc') || lowerUrl.includes('litecoin')) return 'Ł';
+    if (lowerUrl.includes('trx') || lowerUrl.includes('tron')) return '🔴';
+    if (lowerUrl.includes('doge')) return '🐕';
+    if (lowerUrl.includes('pepe')) return '🐸';
+    if (lowerUrl.includes('xrp')) return '✖️';
+    if (lowerUrl.includes('avalanche') || lowerUrl.includes('avax')) return '🔺';
+    if (lowerUrl.includes('monero')) return '🔒';
+    if (lowerUrl.includes('wallet') || lowerUrl.includes('crypto')) return '💎';
+    if (lowerUrl.includes('paypal')) return '🅿️';
+    if (lowerUrl.includes('cashapp')) return '💵';
+    if (lowerUrl.includes('stripe')) return '💳';
+  }
 
   // 1. Direct Emoji Check (single emoji character or unicode symbol)
   if (clean && !clean.startsWith('<') && !clean.startsWith('http')) {

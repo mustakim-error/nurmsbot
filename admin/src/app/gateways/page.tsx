@@ -24,7 +24,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { verifyOnChainTx } from '@/lib/cryptoVerifier';
-import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji, VERIFIED_CUSTOM_EMOJIS } from '@/lib/brandIcons';
+import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji, VERIFIED_CUSTOM_EMOJIS, EMOJI_GG_CRYPTO_PACK } from '@/lib/brandIcons';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -896,13 +896,55 @@ export default function GatewaysPage() {
           </DialogHeader>
 
           <form onSubmit={handleSaveGateway} className="space-y-4 py-2 text-xs">
+            {/* Official Crypto Emoji Pack (from https://emoji.gg/packs/crypto) */}
+            <div className="space-y-1.5 p-3 rounded-xl bg-secondary/30 border border-border/70">
+              <label className="block font-medium text-foreground text-[11px] text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                <span className="flex items-center gap-1.5 text-white font-semibold">
+                  <Coins className="w-3.5 h-3.5 text-primary" />
+                  Official Crypto Emoji Pack (emoji.gg)
+                </span>
+                <span className="text-primary font-mono text-[10px]">1-Click Quick Fill</span>
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-40 overflow-y-auto p-1.5 rounded-lg bg-card/60 border border-border/60 scrollbar-thin">
+                {EMOJI_GG_CRYPTO_PACK.map((coin) => {
+                  const isSelected = gatewayForm.icon === coin.imageUrl || gatewayForm.icon === coin.id;
+                  return (
+                    <button
+                      key={coin.id}
+                      type="button"
+                      onClick={() => {
+                        setGatewayForm({
+                          ...gatewayForm,
+                          name: gatewayForm.name ? gatewayForm.name : coin.name,
+                          icon: coin.imageUrl,
+                          currency: coin.symbol,
+                          custom_emoji_id: coin.custom_emoji_id || gatewayForm.custom_emoji_id,
+                        });
+                      }}
+                      className={`flex items-center gap-2 p-1.5 rounded-lg border text-left transition-all ${
+                        isSelected
+                          ? 'bg-primary/20 border-primary text-white shadow-sm ring-1 ring-primary/40'
+                          : 'bg-secondary/40 hover:bg-secondary/90 border-border/50 text-muted-foreground hover:text-white'
+                      }`}
+                    >
+                      <img src={coin.imageUrl} alt={coin.name} className="w-5 h-5 object-contain shrink-0 rounded" />
+                      <div className="truncate min-w-0">
+                        <div className="text-[11px] font-semibold text-white truncate">{coin.symbol}</div>
+                        <div className="text-[9px] text-muted-foreground truncate">{coin.name}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* Official Crypto & Gateway SVG Brand Presets */}
             <div>
               <label className="block font-medium text-foreground mb-1.5 text-[11px] text-muted-foreground uppercase tracking-wider flex items-center justify-between">
                 <span>⚡ Official SVG Payment Brand Logos (1-Click Fill)</span>
                 <span className="text-primary font-mono text-[10px]">Pure Vector SVG</span>
               </label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-32 overflow-y-auto p-2 rounded-lg bg-secondary/30 border border-border/70">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 max-h-28 overflow-y-auto p-1.5 rounded-lg bg-secondary/30 border border-border/70 scrollbar-thin">
                 {BRAND_PRESETS.filter(bp => bp.category === 'Crypto' || ['telegram', 'discord'].includes(bp.id)).map((bp) => {
                   const isSelected = gatewayForm.icon === bp.id;
                   return (
@@ -984,8 +1026,9 @@ export default function GatewaysPage() {
                 <span>Telegram Bot Gateway Button Preview</span>
                 <span className="text-primary font-bold">Native Style</span>
               </div>
-              <div className="py-2 px-3 rounded-lg text-center font-bold text-xs border border-primary/40 bg-primary/20 text-white shadow-sm">
-                {gatewayForm.custom_emoji_id ? '✨ [Custom Vector Logo] ' : `${resolveTelegramButtonEmoji(gatewayForm.icon || gatewayForm.name, gatewayForm.name)} `}{gatewayForm.name || 'Payment Gateway'}
+              <div className="py-2 px-3 rounded-lg text-center font-bold text-xs border border-primary/40 bg-primary/20 text-white shadow-sm flex items-center justify-center gap-1.5">
+                <BrandIcon icon={gatewayForm.icon || gatewayForm.name} className="w-4 h-4 shrink-0 inline-block" />
+                <span>{gatewayForm.custom_emoji_id ? '✨ [Custom Vector Logo] ' : `${resolveTelegramButtonEmoji(gatewayForm.icon || gatewayForm.name, gatewayForm.name)} `}{gatewayForm.name || 'Payment Gateway'}</span>
               </div>
             </div>
 
@@ -1038,7 +1081,7 @@ export default function GatewaysPage() {
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block font-medium text-foreground mb-1">Gateway Type</label>
                 <select
@@ -1078,14 +1121,14 @@ export default function GatewaysPage() {
 
                 {/* Exchange Read-Only API Integration Card */}
                 <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-2.5">
-                  <div className="flex items-center justify-between">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
                     <div className="flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-amber-400" />
                       <span className="font-semibold text-white text-xs">
                         {(gatewayForm.name || '').includes('Bybit') ? 'Bybit' : 'Binance'} Read-Only API Integration
                       </span>
                     </div>
-                    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 font-mono">
+                    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30 font-mono self-start sm:self-auto">
                       ⚡ 100% Automated
                     </Badge>
                   </div>
@@ -1093,7 +1136,7 @@ export default function GatewaysPage() {
                     Connect your Read-Only API (No withdrawal permissions allowed/required). The bot verifies payments automatically 24/7 on the exchange!
                   </p>
 
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                     <div>
                       <label className="block text-[11px] font-medium text-foreground mb-1">
                         API Key (Read-Only)
@@ -1120,14 +1163,14 @@ export default function GatewaysPage() {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
                       disabled={testingApi || !gatewayForm.apiKey || !gatewayForm.apiSecret}
                       onClick={handleTestExchangeApi}
-                      className="h-7 text-xs gap-1 border-amber-500/30 hover:bg-amber-500/10 text-amber-300"
+                      className="h-7 text-xs gap-1 border-amber-500/30 hover:bg-amber-500/10 text-amber-300 w-full sm:w-auto"
                     >
                       {testingApi ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
                       Test API Connection
@@ -1155,7 +1198,7 @@ export default function GatewaysPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               <div>
                 <label className="block font-medium text-foreground mb-1">Min Deposit</label>
                 <Input
@@ -1193,12 +1236,12 @@ export default function GatewaysPage() {
                   id="autoApproveToggle"
                   checked={gatewayForm.autoApprove !== false}
                   onChange={(e) => setGatewayForm({ ...gatewayForm, autoApprove: e.target.checked })}
-                  className="h-4 w-4 rounded accent-primary cursor-pointer"
+                  className="h-4 w-4 rounded accent-primary cursor-pointer shrink-0 ml-2"
                 />
               </div>
 
               {gatewayForm.type === 'uid' && gatewayForm.autoApprove !== false && (
-                <div className="pt-2 border-t border-primary/10 grid grid-cols-2 gap-2">
+                <div className="pt-2 border-t border-primary/10 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <div>
                     <label className="block text-[11px] font-medium text-foreground mb-1">
                       Auto-Credit Amount ($ USD)
@@ -1219,11 +1262,11 @@ export default function GatewaysPage() {
               )}
             </div>
 
-            <DialogFooter className="pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setIsGatewayDialogOpen(false)}>
+            <DialogFooter className="sticky bottom-0 bg-card/95 backdrop-blur-md pt-3 pb-1 border-t border-border/70 flex flex-col-reverse sm:flex-row gap-2 justify-end z-20">
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsGatewayDialogOpen(false)} className="w-full sm:w-auto text-xs h-9 sm:h-8">
                 Cancel
               </Button>
-              <Button type="submit" size="sm" variant="default">
+              <Button type="submit" size="sm" variant="default" className="w-full sm:w-auto bg-primary text-black font-semibold hover:bg-primary/90 text-xs h-9 sm:h-8">
                 Save Gateway
               </Button>
             </DialogFooter>

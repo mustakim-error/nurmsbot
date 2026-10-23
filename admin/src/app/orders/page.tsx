@@ -322,28 +322,28 @@ export default function OrdersPage() {
             </DialogHeader>
 
             <div className="space-y-3 py-2">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <span>Buyer: <strong className="text-white">{selectedOrder.userName}</strong> (ID: {selectedOrder.userId})</span>
-                <span>Amount: <strong className="text-emerald-400 font-mono">${Number(selectedOrder.totalPrice || selectedOrder.price || 0).toFixed(2)}</strong></span>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs text-muted-foreground gap-1 pb-1">
+                <span className="truncate">Buyer: <strong className="text-white">{selectedOrder.userName}</strong> (ID: {selectedOrder.userId})</span>
+                <span className="shrink-0">Amount: <strong className="text-emerald-400 font-mono">${Number(selectedOrder.totalPrice || selectedOrder.price || 0).toFixed(2)}</strong></span>
               </div>
 
               <div className="relative">
-                <pre className="p-3.5 bg-black/70 border border-border/80 rounded-lg text-xs font-mono text-emerald-300 max-h-72 overflow-y-auto whitespace-pre-wrap break-all select-all">
+                <pre className="p-3 bg-black/70 border border-border/80 rounded-lg text-xs font-mono text-emerald-300 max-h-56 sm:max-h-72 overflow-y-auto whitespace-pre-wrap break-all select-all scrollbar-thin">
                   {selectedOrder.payload || 'No credentials found'}
                 </pre>
               </div>
             </div>
 
-            <DialogFooter className="flex items-center justify-between sm:justify-between w-full">
-              <span className="text-[11px] text-muted-foreground font-mono">
+            <DialogFooter className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-2 w-full">
+              <span className="text-[11px] text-muted-foreground font-mono text-center sm:text-left">
                 {selectedOrder.createdAt ? new Date(selectedOrder.createdAt).toLocaleString() : ''}
               </span>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 w-full sm:w-auto">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setIsCredentialDialogOpen(false)}
-                  className="text-xs h-8"
+                  className="flex-1 sm:flex-none text-xs h-8"
                 >
                   Close
                 </Button>
@@ -351,7 +351,7 @@ export default function OrdersPage() {
                   variant="default"
                   size="sm"
                   onClick={() => handleCopy('dialog_payload', selectedOrder.payload || '')}
-                  className="text-xs h-8 gap-1.5 bg-primary text-black hover:bg-primary/90 font-semibold"
+                  className="flex-1 sm:flex-none text-xs h-8 gap-1.5 bg-primary text-black hover:bg-primary/90 font-semibold"
                 >
                   {copiedKey === 'dialog_payload' ? (
                     <>

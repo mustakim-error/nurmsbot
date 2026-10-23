@@ -161,9 +161,161 @@ export const BRAND_PRESETS: BrandPreset[] = Object.entries(BRAND_SVGS).map(([id,
   svg: item.svg
 }));
 
+export interface CryptoEmojiItem {
+  id: string;
+  name: string;
+  symbol: string;
+  imageUrl: string;
+  emoji: string;
+  color: string;
+  custom_emoji_id?: string;
+}
+
+/**
+ * Official Crypto Emoji Pack from https://emoji.gg/packs/crypto
+ * Direct high-resolution CDN assets for quick 1-click gateway & product branding
+ */
+export const EMOJI_GG_CRYPTO_PACK: CryptoEmojiItem[] = [
+  {
+    id: 'usdt',
+    name: 'Tether (USDT)',
+    symbol: 'USDT',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/7541-tether-usdt.png',
+    emoji: '🟢',
+    color: '#26a17b',
+    custom_emoji_id: '5292006737874792240',
+  },
+  {
+    id: 'btc',
+    name: 'Bitcoin (BTC)',
+    symbol: 'BTC',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/1425-bitcoin.png',
+    emoji: '🟠',
+    color: '#f7931a',
+    custom_emoji_id: '5291763943373549541',
+  },
+  {
+    id: 'eth',
+    name: 'Ethereum (ETH)',
+    symbol: 'ETH',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/68265-eth.png',
+    emoji: '🔹',
+    color: '#627eea',
+    custom_emoji_id: '5291927564447655889',
+  },
+  {
+    id: 'binance',
+    name: 'Binance (BNB)',
+    symbol: 'BNB',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/77525-binance.png',
+    emoji: '🔸',
+    color: '#f3ba2f',
+    custom_emoji_id: '5408859148592913996',
+  },
+  {
+    id: 'sol',
+    name: 'Solana (SOL)',
+    symbol: 'SOL',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/19845-solana.png',
+    emoji: '🟣',
+    color: '#14f195',
+  },
+  {
+    id: 'ton',
+    name: 'TON Network',
+    symbol: 'TON',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/6765-wallet.png',
+    emoji: '💎',
+    color: '#0098ea',
+    custom_emoji_id: '5321041614443944130',
+  },
+  {
+    id: 'bybit',
+    name: 'Bybit Pay',
+    symbol: 'BYBIT',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/7868-usdt.png',
+    emoji: '🟡',
+    color: '#f7a600',
+    custom_emoji_id: '5291751363414336197',
+  },
+  {
+    id: 'ltc',
+    name: 'Litecoin (LTC)',
+    symbol: 'LTC',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/47311-ltc.png',
+    emoji: 'Ł',
+    color: '#345d9d',
+  },
+  {
+    id: 'trx',
+    name: 'Tron (TRX)',
+    symbol: 'TRX',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/41342-trxcrypto.png',
+    emoji: '🔴',
+    color: '#ef0027',
+  },
+  {
+    id: 'polygon',
+    name: 'Polygon (MATIC)',
+    symbol: 'POL',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/7744-polkadot.png',
+    emoji: '🟣',
+    color: '#8247e5',
+    custom_emoji_id: '5291925777741260362',
+  },
+  {
+    id: 'xrp',
+    name: 'Ripple (XRP)',
+    symbol: 'XRP',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/9660-xrp.png',
+    emoji: '✖️',
+    color: '#23292f',
+  },
+  {
+    id: 'doge',
+    name: 'Dogecoin (DOGE)',
+    symbol: 'DOGE',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/7600-dogecoin.png',
+    emoji: '🐕',
+    color: '#c2a633',
+  },
+  {
+    id: 'pepe',
+    name: 'Pepe Crypto',
+    symbol: 'PEPE',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/9266-pepecrypto.png',
+    emoji: '🐸',
+    color: '#47a845',
+  },
+  {
+    id: 'monero',
+    name: 'Monero (XMR)',
+    symbol: 'XMR',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/36428-monero.png',
+    emoji: '🔒',
+    color: '#ff6600',
+  },
+  {
+    id: 'avax',
+    name: 'Avalanche (AVAX)',
+    symbol: 'AVAX',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/45166-avalanche.png',
+    emoji: '🔺',
+    color: '#e84142',
+  },
+  {
+    id: 'crypto',
+    name: 'Crypto Vault',
+    symbol: 'CRYPTO',
+    imageUrl: 'https://cdn3.emoji.gg/emojis/37634-crypto.png',
+    emoji: '💰',
+    color: '#f5c400',
+  },
+];
+
 /**
  * Universal BrandIcon Component
- * Renders raw SVG, Brand Preset ID, Image URL, or Emoji gracefully
+ * Renders raw SVG, emoji.gg CDN URLs, Brand Preset ID, Image URL, or Emoji gracefully
  */
 export const BrandIcon: React.FC<{
   icon?: string;
@@ -177,7 +329,19 @@ export const BrandIcon: React.FC<{
 
   const clean = icon.trim();
 
-  // 1. Raw SVG String
+  // 1. Image URL or Data URL (including https://cdn3.emoji.gg/...)
+  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:image')) {
+    return (
+      <img 
+        src={clean} 
+        alt="icon" 
+        className={`object-contain rounded shrink-0 ${className}`}
+        style={size ? { width: size, height: size } : undefined}
+      />
+    );
+  }
+
+  // 2. Raw SVG String
   if (clean.startsWith('<svg')) {
     return (
       <div 
@@ -188,7 +352,7 @@ export const BrandIcon: React.FC<{
     );
   }
 
-  // 2. Preset Key Match (e.g. 'netflix', 'chatgpt', 'spotify')
+  // 3. Preset Key Match from BRAND_SVGS (e.g. 'netflix', 'chatgpt', 'spotify')
   const lower = clean.toLowerCase();
   const presetKey = Object.keys(BRAND_SVGS).find(
     (k) => lower === k || lower.includes(k)
@@ -205,19 +369,22 @@ export const BrandIcon: React.FC<{
     );
   }
 
-  // 3. Image URL or Data URL
-  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:image')) {
+  // 4. Crypto Pack Item Match from EMOJI_GG_CRYPTO_PACK
+  const cryptoItem = EMOJI_GG_CRYPTO_PACK.find(
+    (c) => lower === c.id || lower === c.symbol.toLowerCase() || lower.includes(c.id)
+  );
+  if (cryptoItem) {
     return (
       <img 
-        src={clean} 
-        alt="icon" 
+        src={cryptoItem.imageUrl} 
+        alt={cryptoItem.name}
         className={`object-contain rounded shrink-0 ${className}`}
         style={size ? { width: size, height: size } : undefined}
       />
     );
   }
 
-  // 4. Emoji or Character Fallback
+  // 5. Emoji or Character Fallback
   return (
     <span 
       className={`inline-flex items-center justify-center select-none shrink-0 ${className}`}
@@ -235,9 +402,35 @@ export function resolveTelegramButtonEmoji(icon?: string, fallbackName?: string)
   if (!icon && !fallbackName) return '✨';
   const clean = String(icon || '').trim();
 
+  // Check emoji.gg URL or crypto URLs
+  if (clean.includes('emoji.gg') || clean.includes('/emojis/')) {
+    const lowerUrl = clean.toLowerCase();
+    if (lowerUrl.includes('usdt') || lowerUrl.includes('tether')) return '🟢';
+    if (lowerUrl.includes('bitcoin') || lowerUrl.includes('1425-bitcoin') || lowerUrl.includes('btc')) return '🟠';
+    if (lowerUrl.includes('eth') || lowerUrl.includes('ethereum')) return '🔹';
+    if (lowerUrl.includes('binance') || lowerUrl.includes('bnb')) return '🔸';
+    if (lowerUrl.includes('solana') || lowerUrl.includes('sol')) return '🟣';
+    if (lowerUrl.includes('ltc') || lowerUrl.includes('litecoin')) return 'Ł';
+    if (lowerUrl.includes('trx') || lowerUrl.includes('tron')) return '🔴';
+    if (lowerUrl.includes('doge')) return '🐕';
+    if (lowerUrl.includes('pepe')) return '🐸';
+    if (lowerUrl.includes('xrp')) return '✖️';
+    if (lowerUrl.includes('avalanche') || lowerUrl.includes('avax')) return '🔺';
+    if (lowerUrl.includes('monero')) return '🔒';
+    if (lowerUrl.includes('wallet') || lowerUrl.includes('crypto')) return '💎';
+    if (lowerUrl.includes('paypal')) return '🅿️';
+    if (lowerUrl.includes('cashapp')) return '💵';
+    if (lowerUrl.includes('stripe')) return '💳';
+  }
+
   // 1. Direct Emoji Check (single emoji character or unicode symbol)
   if (clean && !clean.startsWith('<') && !clean.startsWith('http')) {
     const lower = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
+    
+    // Check EMOJI_GG_CRYPTO_PACK
+    const crypto = EMOJI_GG_CRYPTO_PACK.find(c => c.id === lower || c.symbol.toLowerCase() === lower);
+    if (crypto) return crypto.emoji;
+
     if (BRAND_SVGS[lower]) {
       return BRAND_SVGS[lower].emoji;
     }
@@ -272,6 +465,9 @@ export function resolveTelegramButtonEmoji(icon?: string, fallbackName?: string)
   // 3. Fallback to product/gateway title
   if (fallbackName) {
     const lowerName = String(fallbackName).toLowerCase();
+    const cryptoByName = EMOJI_GG_CRYPTO_PACK.find(c => lowerName.includes(c.id) || lowerName.includes(c.symbol.toLowerCase()) || lowerName.includes(c.name.toLowerCase()));
+    if (cryptoByName) return cryptoByName.emoji;
+
     for (const [key, item] of Object.entries(BRAND_SVGS)) {
       if (lowerName.includes(key)) {
         return item.emoji;

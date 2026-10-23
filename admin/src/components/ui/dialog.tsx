@@ -14,7 +14,7 @@ const Dialog: React.FC<DialogProps> = ({ open, onOpenChange, children }) => {
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-y-auto overscroll-contain">
       {/* Backdrop */}
       <div 
         className="fixed inset-0 bg-background/80 backdrop-blur-sm transition-opacity"
@@ -32,7 +32,7 @@ const DialogContent = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "relative z-50 w-full max-w-lg rounded-xl border bg-card p-6 shadow-2xl duration-200 animate-in fade-in-0 zoom-in-95",
+      "relative z-50 w-full max-w-[95vw] sm:max-w-lg md:max-w-xl max-h-[92dvh] overflow-y-auto overscroll-contain rounded-2xl border bg-card/95 backdrop-blur-xl p-3.5 sm:p-6 shadow-2xl duration-200 animate-in fade-in-0 zoom-in-95 my-auto scrollbar-thin scrollbar-thumb-white/10 hover:scrollbar-thumb-white/20",
       className
     )}
     {...props}
@@ -42,7 +42,7 @@ const DialogContent = React.forwardRef<
       <button
         type="button"
         onClick={onClose}
-        className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none disabled:pointer-events-none text-muted-foreground hover:text-foreground"
+        className="absolute right-3 top-3 sm:right-4 sm:top-4 h-8 w-8 rounded-full bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-white flex items-center justify-center transition-colors focus:outline-none z-10"
       >
         <X className="h-4 w-4" />
         <span className="sr-only">Close</span>
@@ -58,7 +58,7 @@ const DialogHeader = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col space-y-1.5 text-center sm:text-left pb-4 border-b border-border/50",
+      "flex flex-col space-y-1.5 text-left pr-8 pb-3 sm:pb-4 border-b border-border/50 shrink-0",
       className
     )}
     {...props}
@@ -72,7 +72,7 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 pt-4 border-t border-border/50",
+      "flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 sm:pt-4 border-t border-border/50 shrink-0 mt-3 sm:mt-4",
       className
     )}
     {...props}
@@ -87,7 +87,7 @@ const DialogTitle = React.forwardRef<
   <h2
     ref={ref}
     className={cn(
-      "text-lg font-semibold leading-none tracking-tight text-white",
+      "text-base sm:text-lg font-semibold leading-tight tracking-tight text-white",
       className
     )}
     {...props}
@@ -101,7 +101,7 @@ const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-xs text-muted-foreground", className)}
+    className={cn("text-xs text-muted-foreground leading-relaxed", className)}
     {...props}
   />
 ));

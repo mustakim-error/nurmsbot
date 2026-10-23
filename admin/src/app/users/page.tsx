@@ -275,9 +275,12 @@ export default function UsersPage() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-foreground">
-                Amount to Adjust ($ USD)
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-foreground">
+                  Amount to Adjust ($ USD)
+                </label>
+                <span className="text-[10px] text-muted-foreground font-mono">Instant Sync</span>
+              </div>
               <Input
                 type="number"
                 step="0.5"
@@ -286,35 +289,52 @@ export default function UsersPage() {
                 onChange={(e) => setAdjustAmount(parseFloat(e.target.value) || 0)}
                 className="font-mono text-base font-bold text-foreground"
               />
+              {/* Quick Amount Chips */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {[1, 5, 10, 20, 50, 100].map((amt) => (
+                  <button
+                    key={amt}
+                    type="button"
+                    onClick={() => setAdjustAmount(amt)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-mono transition-all ${
+                      adjustAmount === amt
+                        ? 'bg-primary text-black font-bold ring-1 ring-primary'
+                        : 'bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-white border border-border/60'
+                    }`}
+                  >
+                    +${amt}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 pt-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-3">
               <Button
                 onClick={() => handleUpdateBalance(true)}
                 variant="default"
                 size="sm"
-                className="gap-1 font-semibold"
+                className="gap-1 font-semibold h-9 bg-emerald-600 hover:bg-emerald-500 text-white"
               >
                 <Plus className="w-4 h-4" />
-                Credit (${adjustAmount})
+                Credit (+${adjustAmount})
               </Button>
               <Button
                 onClick={() => handleUpdateBalance(false)}
                 variant="destructive"
                 size="sm"
-                className="gap-1 font-semibold"
+                className="gap-1 font-semibold h-9"
               >
                 <Minus className="w-4 h-4" />
-                Deduct (${adjustAmount})
+                Deduct (-${adjustAmount})
               </Button>
             </div>
 
-            <DialogFooter className="pt-2">
+            <DialogFooter className="pt-2 mt-2">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 onClick={() => setSelectedUser(null)}
-                className="w-full text-xs"
+                className="w-full text-xs h-8"
               >
                 Cancel
               </Button>
