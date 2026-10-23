@@ -227,3 +227,57 @@ export const BrandIcon: React.FC<{
     </span>
   );
 };
+
+/**
+ * Resolves any icon (preset ID, raw SVG, URL, or emoji) to a clean, crisp Telegram button emoji
+ */
+export function resolveTelegramButtonEmoji(icon?: string, fallbackName?: string): string {
+  if (!icon && !fallbackName) return '✨';
+  const clean = String(icon || '').trim();
+
+  // 1. Direct Emoji Check (single emoji character or unicode symbol)
+  if (clean && !clean.startsWith('<') && !clean.startsWith('http')) {
+    const lower = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (BRAND_SVGS[lower]) {
+      return BRAND_SVGS[lower].emoji;
+    }
+    const matchedKey = Object.keys(BRAND_SVGS).find(k => lower === k || lower.includes(k));
+    if (matchedKey && BRAND_SVGS[matchedKey]) {
+      return BRAND_SVGS[matchedKey].emoji;
+    }
+    // Check if it's already an emoji
+    try {
+      const emojiMatch = clean.match(new RegExp('(\\p{Emoji_Presentation}|\\p{Extended_Pictographic})', 'u'));
+      if (emojiMatch) {
+        return emojiMatch[0];
+      }
+    } catch {
+      // fallback
+    }
+    if (clean.length <= 2) {
+      return clean;
+    }
+  }
+
+  // 2. Raw SVG parsing
+  if (clean.startsWith('<svg') || clean.includes('<path')) {
+    const lowerSvg = clean.toLowerCase();
+    for (const [key, item] of Object.entries(BRAND_SVGS)) {
+      if (lowerSvg.includes(key)) {
+        return item.emoji;
+      }
+    }
+  }
+
+  // 3. Fallback to product/gateway title
+  if (fallbackName) {
+    const lowerName = String(fallbackName).toLowerCase();
+    for (const [key, item] of Object.entries(BRAND_SVGS)) {
+      if (lowerName.includes(key)) {
+        return item.emoji;
+      }
+    }
+  }
+
+  return clean && clean.length <= 4 ? clean : '✨';
+}

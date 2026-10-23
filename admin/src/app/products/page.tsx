@@ -28,7 +28,7 @@ import {
   DialogDescription, 
   DialogFooter 
 } from '@/components/ui/dialog';
-import { BRAND_PRESETS, BrandIcon } from '@/lib/brandIcons';
+import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji } from '@/lib/brandIcons';
 
 interface Product {
   id: string;
@@ -114,12 +114,14 @@ export default function ProductsPage() {
     try {
       const id = editingProduct ? editingProduct.id : `prod_${Date.now()}`;
       const prodRef = ref(rtdb, `products/${id}`);
+      const resolvedEmoji = resolveTelegramButtonEmoji(formData.icon, formData.name);
       await set(prodRef, {
         id: id,
         name: formData.name,
         price: Number(formData.price),
         stock: Number(formData.stock),
-        icon: formData.icon || '✨',
+        icon: formData.icon || resolvedEmoji || '✨',
+        emoji: resolvedEmoji,
         description: formData.description,
         payload: formData.payload,
         active: formData.active,
@@ -333,6 +335,28 @@ export default function ProductsPage() {
               </div>
             </div>
 
+            {/* Quick Telegram Button Emojis */}
+            <div>
+              <label className="block font-medium text-foreground mb-1 text-[11px] text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                <span>⚡ Quick Telegram Emojis (1-Click Pick)</span>
+                <span className="text-primary font-mono text-[10px]">Instant Button Icon</span>
+              </label>
+              <div className="flex flex-wrap gap-1 p-1.5 rounded-lg bg-secondary/30 border border-border/70">
+                {['✨', '🤖', '🎬', '🎧', '▶️', '⭐', '👾', '💎', '🔥', '⚡', '👑', '🎮', '🛡️', '💻', '🎨', '📦', '📈', '🟢', '🍎', '🔑'].map((em) => (
+                  <button
+                    key={em}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, icon: em })}
+                    className={`w-7 h-7 rounded text-sm flex items-center justify-center transition-all ${
+                      formData.icon === em ? 'bg-primary text-black font-bold scale-110 shadow' : 'bg-card/70 hover:bg-secondary text-white'
+                    }`}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
               <div className="sm:col-span-3">
                 <label className="block font-medium text-foreground mb-1">Product Title</label>
@@ -344,13 +368,13 @@ export default function ProductsPage() {
                 />
               </div>
               <div>
-                <label className="block font-medium text-foreground mb-1">SVG Key / Code</label>
+                <label className="block font-medium text-foreground mb-1">Icon / SVG / Emoji</label>
                 <div className="flex items-center gap-1.5">
                   <div className="w-9 h-9 rounded-md bg-secondary/60 border border-border/70 flex items-center justify-center shrink-0">
                     <BrandIcon icon={formData.icon} className="w-5 h-5 text-primary" />
                   </div>
                   <Input
-                    placeholder="e.g. chatgpt or <svg..."
+                    placeholder="e.g. chatgpt, <svg..., or 🔥"
                     value={formData.icon}
                     onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                     className="font-mono text-xs"
@@ -370,7 +394,7 @@ export default function ProductsPage() {
                   ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50' 
                   : 'bg-red-600/30 text-red-300 border-red-500/50'
               }`}>
-                {formData.icon || '✨'} {formData.name || 'Product Title'} - {Number(formData.price) === 0 ? '0' : `$${Number(formData.price).toFixed(2)}`}
+                {resolveTelegramButtonEmoji(formData.icon, formData.name)} {formData.name || 'Product Title'} - {Number(formData.price) === 0 ? '0' : `$${Number(formData.price).toFixed(2)}`}
               </div>
             </div>
 

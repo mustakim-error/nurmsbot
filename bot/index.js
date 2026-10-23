@@ -260,40 +260,142 @@ async function recordTransaction(txData) {
   }
 }
 
-// SVG Brand Presets to Telegram Button Label Icon Resolver
-const PRESET_UNICODE_MAP = {
+// Comprehensive SVG Brand Presets & Emojis to Telegram Button Label Resolver
+const BRAND_ICON_MAP = {
+  // AI Tools
+  gemini: '✨',
+  bard: '✨',
+  chatgpt: '🤖',
+  openai: '🤖',
+  gpt: '🤖',
+  claude: '🧠',
+  anthropic: '🧠',
+  cursor: '💻',
+  copilot: '💻',
+  midjourney: '🎨',
+  dalle: '🎨',
+  runway: '🎥',
+  elevenlabs: '🎙️',
+  perplexity: '🔍',
+
+  // Streaming & Media
   netflix: '🎬',
   spotify: '🎧',
-  chatgpt: '🤖',
   youtube: '▶️',
-  telegram: '⭐',
-  discord: '👾',
-  binance: '🔸',
-  bybit: '🟡',
-  usdt: '💵',
-  ton: '💎',
-  polygon: '🟣',
-  ltc: 'Ł',
-  btc: '₿',
-  eth: 'Ξ',
-  canva: '🎨',
+  yt: '▶️',
   prime: '📦',
-  github: '🐙',
-  nordvpn: '🛡️',
+  amazon: '📦',
+  disney: '🏰',
+  hbo: '🍿',
+  crunchyroll: '🍥',
   apple: '🍏',
+  applemusic: '🎵',
+  itunes: '🎵',
+  deezer: '🎶',
+  tidal: '🎶',
+
+  // Social, Gaming & Dev Tools
+  telegram: '⭐',
+  tg: '⭐',
+  discord: '👾',
+  github: '🐙',
+  gitlab: '🦊',
+  canva: '🎨',
+  tradingview: '📈',
+  vpn: '🛡️',
+  nordvpn: '🛡️',
+  expressvpn: '🛡️',
+  surfshark: '🦈',
+  steam: '🎮',
+  playstation: '🎮',
+  xbox: '🎮',
+  roblox: '🧱',
+  minecraft: '⛏️',
+
+  // Crypto Gateways & Tokens
+  binance: '🔸',
+  bnb: '🔸',
+  bybit: '🟡',
+  usdt: '🟢',
+  tether: '🟢',
+  bep20: '🟡',
+  bsc: '🟡',
+  trc20: '🔴',
+  tron: '🔴',
+  trx: '🔴',
+  polygon: '🟣',
+  matic: '🟣',
+  ton: '💎',
+  toncoin: '💎',
+  btc: '₿',
+  bitcoin: '₿',
+  eth: 'Ξ',
+  ethereum: 'Ξ',
+  ltc: 'Ł',
+  litecoin: 'Ł',
+  sol: '🟣',
+  solana: '🟣',
+
+  // Local Mobile Banking & Fiat
+  bkash: '🌸',
+  nagad: '🟠',
+  rocket: '🚀',
+  upay: '📱',
+  cellfin: '🏦',
+  bank: '🏦',
+  visa: '💳',
+  mastercard: '💳',
+  paypal: '🅿️',
+  stripe: '💳',
 };
 
-function getButtonIcon(icon) {
-  if (!icon) return '';
-  const trimmed = String(icon).trim();
-  if (trimmed.startsWith('<svg') || trimmed.startsWith('<?xml') || trimmed.startsWith('http')) {
-    return '✨';
+function getButtonIcon(icon, fallbackName = '') {
+  const clean = String(icon || '').trim();
+
+  // 1. Direct Emoji Check (single emoji character or unicode symbol)
+  if (clean && !clean.startsWith('<') && !clean.startsWith('http')) {
+    const lowerKey = clean.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (BRAND_ICON_MAP[lowerKey]) {
+      return BRAND_ICON_MAP[lowerKey];
+    }
+    for (const [key, emoji] of Object.entries(BRAND_ICON_MAP)) {
+      if (lowerKey === key || lowerKey.includes(key)) {
+        return emoji;
+      }
+    }
+    // Check if it's already an emoji (e.g. 🤖, 🎬, ✨, 💎, 🔥, ⚡, 👑)
+    const emojiRegex = /(\p{Emoji_Presentation}|\p{Extended_Pictographic})/u;
+    if (emojiRegex.test(clean)) {
+      const match = clean.match(emojiRegex);
+      if (match) return match[0];
+      return clean;
+    }
+    if (clean.length <= 2) {
+      return clean;
+    }
   }
-  const lower = trimmed.toLowerCase();
-  if (PRESET_UNICODE_MAP[lower]) {
-    return PRESET_UNICODE_MAP[lower];
+
+  // 2. If raw SVG XML was pasted into admin panel (<svg ...>)
+  if (clean.startsWith('<svg') || clean.startsWith('<?xml') || clean.includes('<path')) {
+    const lowerSvg = clean.toLowerCase();
+    for (const [key, emoji] of Object.entries(BRAND_ICON_MAP)) {
+      if (lowerSvg.includes(key)) {
+        return emoji;
+      }
+    }
   }
-  return trimmed;
+
+  // 3. Fallback: Automatically detect brand icon from the product or gateway name!
+  if (fallbackName) {
+    const lowerName = String(fallbackName).toLowerCase();
+    for (const [key, emoji] of Object.entries(BRAND_ICON_MAP)) {
+      if (lowerName.includes(key)) {
+        return emoji;
+      }
+    }
+  }
+
+  return clean && clean.length <= 4 ? clean : '✨';
 }
 
 // Default Presets for Payment Gateways
@@ -571,7 +673,7 @@ bot.callbackQuery('menu_shop', async (ctx) => {
   products.forEach((prod) => {
     const isAvailable = Number(prod.stock) > 0;
     const priceDisplay = Number(prod.price) === 0 ? '0' : `$${prod.price}`;
-    const icon = getButtonIcon(prod.icon);
+    const icon = getButtonIcon(prod.icon || prod.emoji, prod.name);
     const label = `${icon ? `${icon} ` : ''}${prod.name} - ${priceDisplay}`;
 
     rows.push([
@@ -631,7 +733,9 @@ async function renderProductDetail(ctx, prodId, quantity = 1, isEdit = true) {
   const balanceAfter = userBalance - totalPrice;
   const shortfall = totalPrice - userBalance;
 
-  let text = `📦 *${product.name}*\n` +
+  const prodIcon = getButtonIcon(product.icon || product.emoji, product.name);
+
+  let text = `${prodIcon ? `${prodIcon} ` : '📦 '}*${product.name}*\n` +
     `━━━━━━━━━━━━━━━━━━━━━━━━\n` +
     `📝 *Description:*\n${product.description || 'Premium digital product with 30-day automated replacement warranty.'}\n\n` +
     `📊 *Order Specifications:*\n` +
@@ -949,9 +1053,10 @@ bot.callbackQuery(/^buy_([^_]+)(?:_(\d+))?$/, async (ctx) => {
   }
 
   // 6. Deliver Ultra-Slick Digital Receipt with Monospace Credentials
+  const prodIcon = getButtonIcon(product.icon || product.emoji, product.name);
   const successText = `🎉 *PURCHASE SUCCESSFUL!*\n\n` +
     `🧾 *Order ID:* \`${formattedOrderId}\`\n` +
-    `📦 *Product:* *${product.name}*\n` +
+    `${prodIcon ? `${prodIcon} ` : '📦 '}*Product:* *${product.name}*\n` +
     `🔢 *Quantity:* *${qty} pcs*\n` +
     `💲 *Unit Price:* *$${unitPrice.toFixed(2)}*\n` +
     `💰 *Total Paid:* *$${totalPrice.toFixed(2)}*\n` +
@@ -1761,7 +1866,8 @@ bot.callbackQuery('menu_orders', async (ctx) => {
       const formattedId = ord.orderId || ('#' + ord.id);
       const total = Number(ord.totalPrice || ord.price || 0).toFixed(2);
       const dateStr = ord.createdAt ? new Date(ord.createdAt).toLocaleDateString() : '';
-      text += `${idx + 1}. *${ord.productName}* (x${ord.quantity || 1} pcs)\n` +
+      const ordIcon = getButtonIcon(ord.icon || ord.emoji, ord.productName);
+      text += `${idx + 1}. ${ordIcon ? `${ordIcon} ` : ''}*${ord.productName}* (x${ord.quantity || 1} pcs)\n` +
         `   🧾 ID: \`${formattedId}\` | 💰 *$${total}*\n` +
         `   📅 ${dateStr} | Status: ✅ *${ord.status || 'completed'}*\n\n`;
 

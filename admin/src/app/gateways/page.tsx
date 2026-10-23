@@ -24,7 +24,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { verifyOnChainTx } from '@/lib/cryptoVerifier';
-import { BRAND_PRESETS, BrandIcon } from '@/lib/brandIcons';
+import { BRAND_PRESETS, BrandIcon, resolveTelegramButtonEmoji } from '@/lib/brandIcons';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -348,10 +348,13 @@ export default function GatewaysPage() {
       const id = editingGateway ? editingGateway.id : gatewayForm.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
       const gatewayRef = ref(rtdb, `gateways/${id}`);
 
+      const resolvedEmoji = resolveTelegramButtonEmoji(gatewayForm.icon || gatewayForm.name, gatewayForm.name);
+
       await set(gatewayRef, {
         id,
         name: gatewayForm.name,
-        icon: gatewayForm.icon || '🔸',
+        icon: gatewayForm.icon || resolvedEmoji || '🔸',
+        emoji: resolvedEmoji,
         type: gatewayForm.type || 'crypto_address',
         currency: gatewayForm.currency || 'USDT',
         network: gatewayForm.network || '',
@@ -924,6 +927,28 @@ export default function GatewaysPage() {
               </div>
             </div>
 
+            {/* Quick Telegram Gateway Emojis */}
+            <div>
+              <label className="block font-medium text-foreground mb-1 text-[11px] text-muted-foreground uppercase tracking-wider flex items-center justify-between">
+                <span>⚡ Quick Gateway Emojis (1-Click Pick)</span>
+                <span className="text-primary font-mono text-[10px]">Instant Button Icon</span>
+              </label>
+              <div className="flex flex-wrap gap-1 p-1.5 rounded-lg bg-secondary/30 border border-border/70">
+                {['🔸', '🟡', '🟢', '💎', '🟣', 'Ł', '₿', 'Ξ', '🌸', '🟠', '🚀', '💳', '🅿️', '🏦'].map((em) => (
+                  <button
+                    key={em}
+                    type="button"
+                    onClick={() => setGatewayForm({ ...gatewayForm, icon: em })}
+                    className={`w-7 h-7 rounded text-sm flex items-center justify-center transition-all ${
+                      gatewayForm.icon === em ? 'bg-primary text-black font-bold scale-110 shadow' : 'bg-card/70 hover:bg-secondary text-white'
+                    }`}
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
               <div className="sm:col-span-3">
                 <label className="block font-medium text-foreground mb-1">Gateway Name</label>
@@ -935,18 +960,29 @@ export default function GatewaysPage() {
                 />
               </div>
               <div>
-                <label className="block font-medium text-foreground mb-1">SVG Key / Code</label>
+                <label className="block font-medium text-foreground mb-1">Icon / SVG / Emoji</label>
                 <div className="flex items-center gap-1.5">
                   <div className="w-9 h-9 rounded-md bg-secondary/60 border border-border/70 flex items-center justify-center shrink-0">
                     <BrandIcon icon={gatewayForm.icon} className="w-5 h-5 text-primary" />
                   </div>
                   <Input
-                    placeholder="e.g. binance, usdt, <svg..."
+                    placeholder="e.g. binance, usdt, <svg..., or 🔸"
                     value={gatewayForm.icon}
                     onChange={(e) => setGatewayForm({ ...gatewayForm, icon: e.target.value })}
                     className="font-mono text-xs"
                   />
                 </div>
+              </div>
+            </div>
+
+            {/* Live Telegram Gateway Button Preview */}
+            <div className="p-2.5 rounded-lg bg-card/80 border space-y-1">
+              <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono uppercase">
+                <span>Telegram Bot Gateway Button Preview</span>
+                <span className="text-primary font-bold">Native Style</span>
+              </div>
+              <div className="py-2 px-3 rounded-lg text-center font-bold text-xs border border-primary/40 bg-primary/20 text-white shadow-sm">
+                {resolveTelegramButtonEmoji(gatewayForm.icon || gatewayForm.name, gatewayForm.name)} {gatewayForm.name || 'Payment Gateway'}
               </div>
             </div>
 
