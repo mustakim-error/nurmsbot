@@ -2,7 +2,7 @@ require('dotenv').config();
 const { Bot } = require('grammy');
 const express = require('express');
 const { rtdb } = require('./firebase');
-const { ref, get, set, update, onValue } = require('firebase/database');
+const { ref, get, set, update, remove, onValue } = require('firebase/database');
 const { verifyOnChainTx } = require('./cryptoVerifier');
 const { verifyBinancePayment, verifyBybitPayment } = require('./exchangeVerifier');
 
@@ -1609,6 +1609,7 @@ bot.on('message:text', async (ctx) => {
     const cleanText = rawInput.replace(/^(txid|order\s*id|transaction\s*id|hash|ref|order)\s*[:=-]?\s*/i, '').trim();
     const parts = cleanText.split(/\s+/);
     const rawTx = parts[0] || cleanText;
+    const txId = rawTx;
     const normalizedTxId = rawTx.replace(/^0x/i, '').replace(/^#/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
     const gatewayId = session.awaitingTxFor;
@@ -1690,12 +1691,87 @@ bot.on('message:text', async (ctx) => {
     };
 
     // 2. Automated On-Chain Verification for EVM Crypto Hashes (BSC / Polygon)
-    if (gw && gw.type === 'crypto_address' && /^0x[a-fA-F0-9]{64}$/.test(txId)) {
-      const waitNotice = await ctx.reply('🔍 *Verifying transaction on blockchain network...*', { parse_mode: 'Markdown' });
+    const cleanTxHash = rawTx.startsWith('0x') ? rawTx : `0x${rawTx}`;
+    if (gw && gw.type === 'crypto_address' && /^0x[a-fA-F0-9]{64}$/.test(cleanTxHash)) {
+      const waitNotice = await ctx.reply('🔍 *Verifying transaction on blockchain (<3s)...*', { parse_mode: 'Markdown' });
 
       try {
-        const onChainResult = await verifyOnChainTx(gw, txId);
+        const onChainResult = await verifyOnChainTx(gw, cleanTxHash, 12);
 
+        // A. REJECT: Transaction is older than 12 minutes
+        if (onChainResult && onChainResult.expired) {
+          await remove(processedRef);
+          try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
+
+          const expiredMsg = `❌ *Transaction Expired (Older Than 12 Minutes)!*\n\n` +
+            `• *TxID:* \`${cleanTxHash}\`\n` +
+            `• *Transaction Age:* *${onChainResult.ageMinutes} minutes ago*\n` +
+            `• *Maximum Allowed:* *12 minutes*\n\n` +
+            `⚠️ *This payment was completed ${onChainResult.ageMinutes} minutes ago and has expired.* We only accept fresh payments made within the last 12 minutes.\n\n` +
+            `If you made a new payment, please ensure you submit the latest TxID.`;
+
+          const reply_markup = createStyledKeyboard([
+            [{ text: '◀️ Back to Deposit', callback_data: `gate_${gatewayId}`, style: 'primary' }],
+            [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+          ]);
+
+          return ctx.reply(expiredMsg, { parse_mode: 'Markdown', reply_markup });
+        }
+
+        // B. REJECT: Transaction failed / reverted on chain
+        if (onChainResult && onChainResult.failed) {
+          await remove(processedRef);
+          try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
+
+          const failMsg = `❌ *Transaction Failed on Blockchain!*\n\n` +
+            `• *TxID:* \`${cleanTxHash}\`\n\n` +
+            `⚠️ *This transaction failed or was reverted on the blockchain.* No funds were transferred.\n\n` +
+            `Please check your crypto wallet and submit a successful payment.`;
+
+          const reply_markup = createStyledKeyboard([
+            [{ text: '◀️ Back to Deposit', callback_data: `gate_${gatewayId}`, style: 'primary' }],
+            [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+          ]);
+
+          return ctx.reply(failMsg, { parse_mode: 'Markdown', reply_markup });
+        }
+
+        // C. REJECT: Payment not sent to our deposit address
+        if (onChainResult && onChainResult.wrongRecipient) {
+          await remove(processedRef);
+          try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
+
+          const wrongMsg = `❌ *Payment Not Sent To Deposit Address!*\n\n` +
+            `• *TxID:* \`${cleanTxHash}\`\n` +
+            `• *Required Deposit Address:*\n\`${gw.address}\`\n\n` +
+            `⚠️ *No transfer to our deposit address was found in this transaction.* Please ensure you send funds to the exact address shown in the deposit menu.`;
+
+          const reply_markup = createStyledKeyboard([
+            [{ text: '◀️ Back to Deposit', callback_data: `gate_${gatewayId}`, style: 'primary' }],
+            [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+          ]);
+
+          return ctx.reply(wrongMsg, { parse_mode: 'Markdown', reply_markup });
+        }
+
+        // D. REJECT: Transaction not yet confirmed in a block
+        if (onChainResult && onChainResult.pending) {
+          await remove(processedRef);
+          try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
+
+          const pendMsg = `⏳ *Transaction Still Pending on Blockchain!*\n\n` +
+            `• *TxID:* \`${cleanTxHash}\`\n\n` +
+            `⚠️ *This transaction has not yet been confirmed in a block by miners.* Please wait 15–30 seconds for network confirmation, then submit it again.`;
+
+          const reply_markup = createStyledKeyboard([
+            [{ text: '🔄 Try Again', callback_data: `gate_${gatewayId}`, style: 'primary' }],
+            [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+          ]);
+
+          return ctx.reply(pendMsg, { parse_mode: 'Markdown', reply_markup });
+        }
+
+        // E. SUCCESS: Verified and within last 12 minutes!
         if (onChainResult && onChainResult.verified) {
           const creditedAmount = onChainResult.amount || 1.0;
           const userSnap = await get(ref(rtdb, `users/${userId}`));
@@ -1722,23 +1798,37 @@ bot.on('message:text', async (ctx) => {
 
           // Record in processed_txs to prevent future duplicate
           await set(processedRef, {
-            txId: txId,
+            txId: cleanTxHash,
             userId: String(userId),
             amount: creditedAmount,
             gatewayId: gatewayId,
+            status: 'approved',
             verifiedAt: new Date().toISOString(),
             method: 'onchain_auto',
+          });
+
+          // Record financial transaction ledger
+          await recordTransaction({
+            type: 'deposit',
+            userId: String(userId),
+            userName: ctx.from.first_name || ctx.from.username || 'Member',
+            amount: creditedAmount,
+            gateway: gatewayName,
+            txId: cleanTxHash,
+            balanceAfter: newBal,
+            note: `Crypto on-chain auto-verified (${(onChainResult.chain || 'BSC').toUpperCase()})`,
           });
 
           try {
             await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id);
           } catch {}
 
-          const successMsg = `⚡ *Payment Verified & Credited Automatically!*\n\n` +
+          const successMsg = `⚡ *Payment Verified & Credited Instantly!*\n\n` +
             `💎 *Gateway:* *${gatewayName}* (${(onChainResult.chain || 'BSC').toUpperCase()})\n` +
             `💰 *Credited Amount:* *$${creditedAmount.toFixed(2)} USDT*\n` +
             `🪙 *New Wallet Balance:* *$${newBal.toFixed(2)}*\n` +
-            `📌 *Tx Hash:*\n\`${txId}\`\n\n` +
+            `⏱️ *Transaction Age:* *${onChainResult.ageMinutes || 0} minutes ago*\n` +
+            `📌 *Tx Hash:*\n\`${cleanTxHash}\`\n\n` +
             `🎉 Funds have been added to your wallet in real-time! You can now purchase products directly.`;
 
           const reply_markup = createStyledKeyboard([
@@ -1749,32 +1839,33 @@ bot.on('message:text', async (ctx) => {
 
           return ctx.reply(successMsg, { parse_mode: 'Markdown', reply_markup });
         } else {
-          // On-chain check did not confirm immediately (pending / wrong address / reverted)
-          // Save as pending for manual admin review
-          await set(ref(rtdb, `deposits/${depId}`), {
-            ...depositData,
-            note: onChainResult.reason || 'Pending on-chain confirmation',
-          });
+          // Fallback if not verified
+          await remove(processedRef);
+          try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
 
-          try {
-            await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id);
-          } catch {}
-
-          const pendingMsg = `⏳ *Payment Submitted for Admin Verification*\n\n` +
-            `💎 *Gateway:* *${gatewayName}*\n` +
-            `📌 *Tx Hash:*\n\`${txId}\`\n\n` +
-            `🔍 *Status:* ${onChainResult.reason || 'Confirming on the network.'}\n\n` +
-            `✅ Your transaction details have been sent to our admin panel for live verification. Your balance will be updated within minutes!`;
+          const unverifiedMsg = `❌ *Transaction Verification Failed!*\n\n` +
+            `• *TxID:* \`${cleanTxHash}\`\n` +
+            `• *Reason:* ${onChainResult.reason || 'Payment could not be verified on the blockchain.'}\n\n` +
+            `⚠️ Please check your transaction details and make sure payment was sent to the correct address within the last 12 minutes.`;
 
           const reply_markup = createStyledKeyboard([
-            [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+            [{ text: '◀️ Back to Deposit', callback_data: `gate_${gatewayId}`, style: 'primary' }],
             [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
           ]);
 
-          return ctx.reply(pendingMsg, { parse_mode: 'Markdown', reply_markup });
+          return ctx.reply(unverifiedMsg, { parse_mode: 'Markdown', reply_markup });
         }
       } catch (err) {
-        console.error('Error during on-chain verification:', err.message);
+        console.error('Error during on-chain verification:', err);
+        await remove(processedRef);
+        try { await ctx.api.deleteMessage(ctx.chat.id, waitNotice.message_id); } catch {}
+        return ctx.reply('⚠️ *Network Error:* Blockchain node query timed out. Please try submitting your TxID again in a moment.', {
+          parse_mode: 'Markdown',
+          reply_markup: createStyledKeyboard([
+            [{ text: '🔄 Try Again', callback_data: `gate_${gatewayId}`, style: 'primary' }],
+            [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+          ]),
+        });
       }
     }
 
