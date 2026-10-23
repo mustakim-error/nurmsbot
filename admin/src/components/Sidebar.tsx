@@ -13,7 +13,8 @@ import {
   Sparkles,
   ChevronRight,
   Activity,
-  Zap
+  Zap,
+  Coins
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,7 @@ import { ref, onValue } from 'firebase/database';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Products & Pricing', href: '/products', icon: ShoppingBag },
+  { name: 'Payment Gateways', href: '/gateways', icon: Coins },
   { name: 'Users & Wallets', href: '/users', icon: Users },
   { name: 'Order History', href: '/orders', icon: Receipt },
   { name: '24/7 Uptime & Cron', href: '/uptime', icon: Activity },
@@ -32,6 +34,7 @@ const navigation = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [botOnline, setBotOnline] = useState<boolean | null>(null);
+  const [pendingDeposits, setPendingDeposits] = useState<number>(0);
 
   useEffect(() => {
     try {
@@ -45,7 +48,25 @@ export default function Sidebar() {
           setBotOnline(false);
         }
       });
-      return () => unsub();
+
+      const depositsRef = ref(rtdb, 'deposits');
+      const unsubDep = onValue(depositsRef, (snapshot) => {
+        if (snapshot.exists()) {
+          let count = 0;
+          const val = snapshot.val();
+          for (const item of Object.values(val) as any[]) {
+            if (item?.status === 'pending') count++;
+          }
+          setPendingDeposits(count);
+        } else {
+          setPendingDeposits(0);
+        }
+      });
+
+      return () => {
+        unsub();
+        unsubDep();
+      };
     } catch {
       setBotOnline(false);
     }
@@ -88,6 +109,11 @@ export default function Sidebar() {
                   <Icon className={cn("w-4 h-4", isActive ? "text-primary" : "text-muted-foreground")} />
                   {item.name}
                 </div>
+                {item.href === '/gateways' && pendingDeposits > 0 && (
+                  <Badge variant="destructive" className="px-1.5 py-0 text-[10px] animate-pulse">
+                    {pendingDeposits}
+                  </Badge>
+                )}
                 {item.name.includes('24/7') && (
                   <span className="flex h-2 w-2 relative">
                     {botOnline ? (
@@ -100,7 +126,7 @@ export default function Sidebar() {
                     )}
                   </span>
                 )}
-                {isActive && !item.name.includes('24/7') && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+                {isActive && !item.name.includes('24/7') && item.href !== '/gateways' && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
               </Link>
             );
           })}

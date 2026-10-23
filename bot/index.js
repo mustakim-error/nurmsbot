@@ -134,19 +134,150 @@ async function isChannelMember(ctx, userId) {
   }
 }
 
-// Helper: Create Inline Keyboard with Native Telegram API 9.4+ button styles
+// Helper: Create Inline Keyboard with Native Telegram API button styles & copy_text
 function createStyledKeyboard(rows) {
   const inline_keyboard = rows.map((row) =>
     row.map((btn) => {
       const buttonObj = { text: btn.text };
       if (btn.url) buttonObj.url = btn.url;
       if (btn.callback_data) buttonObj.callback_data = btn.callback_data;
+      if (btn.copy_text) buttonObj.copy_text = btn.copy_text;
       if (btn.style) buttonObj.style = btn.style;
       return buttonObj;
     })
   );
   return { inline_keyboard };
 }
+
+// Default Presets for Payment Gateways
+const DEFAULT_GATEWAYS = [
+  {
+    id: 'usdt-bep20',
+    name: 'USDT (BEP20)',
+    icon: '🔸',
+    type: 'crypto_address',
+    currency: 'USDT',
+    network: 'BSC (BEP20)',
+    minDeposit: '0.01 USDT',
+    maxDeposit: '10000.00 USDT',
+    address: '0xAfCdaAfA2e75A543B2A120c31a05708982Bd4b7F',
+    warning: 'Only send USDT on BEP20 (BSC) network. Sending other tokens or using wrong network will result in loss of funds.',
+    active: true,
+  },
+  {
+    id: 'usdt-polygon',
+    name: 'USDT (Polygon)',
+    icon: '🟣',
+    type: 'crypto_address',
+    currency: 'USDT',
+    network: 'Polygon',
+    minDeposit: '0.01 USDT',
+    maxDeposit: '10000.00 USDT',
+    address: '0xAfCdaAfA2e75A543B2A120c31a05708982Bd4b7F',
+    warning: 'Only send USDT on Polygon network. Sending other tokens or using wrong network will result in loss of funds.',
+    active: true,
+  },
+  {
+    id: 'usdt-ton',
+    name: 'USDT (Ton)',
+    icon: '💎',
+    type: 'crypto_address',
+    currency: 'USDT',
+    network: 'TON',
+    minDeposit: '0.10 USDT',
+    maxDeposit: '10000.00 USDT',
+    address: 'EQB_YourTonDepositAddressHere1234567890',
+    warning: 'Send only USDT on TON network.',
+    active: true,
+  },
+  {
+    id: 'ton-ton',
+    name: 'Ton (Ton)',
+    icon: '💎',
+    type: 'crypto_address',
+    currency: 'TON',
+    network: 'TON',
+    minDeposit: '0.10 TON',
+    maxDeposit: '5000.00 TON',
+    address: 'EQB_YourTonDepositAddressHere1234567890',
+    warning: 'Send only TON coin to this address.',
+    active: true,
+  },
+  {
+    id: 'binance-pay',
+    name: 'Binance Pay',
+    icon: '🔸',
+    type: 'uid',
+    currency: 'USDT',
+    network: 'Binance Pay',
+    minDeposit: '0.01 USDT',
+    maxDeposit: '5.00 USDT',
+    uid: '1233668018',
+    warning: 'For more than 5.00 USDT, please use one of the other payment methods — they are credited automatically. Send only USDT via Binance Pay to the ID above.',
+    active: true,
+  },
+  {
+    id: 'bybit-pay',
+    name: 'Bybit Pay',
+    icon: '🟡',
+    type: 'uid',
+    currency: 'USDT',
+    network: 'Bybit UID',
+    minDeposit: '0.01 USDT',
+    maxDeposit: '100.00 USDT',
+    uid: '987654321',
+    warning: 'Send USDT via Bybit internal transfer to the UID above and submit your Transaction ID.',
+    active: true,
+  },
+  {
+    id: 'ltc',
+    name: 'LTC (Litecoin)',
+    icon: 'Ł',
+    type: 'crypto_address',
+    currency: 'LTC',
+    network: 'Litecoin',
+    minDeposit: '0.001 LTC',
+    maxDeposit: '100.00 LTC',
+    address: 'ltc1qYourLitecoinAddressHere1234567890',
+    warning: 'Send only Litecoin (LTC) to this address.',
+    active: true,
+  },
+];
+
+async function getGateways() {
+  try {
+    const snap = await get(ref(rtdb, 'gateways'));
+    if (snap.exists()) {
+      const val = snap.val();
+      const list = [];
+      for (const [key, item] of Object.entries(val)) {
+        if (item.active !== false) {
+          list.push({ id: key, ...item });
+        }
+      }
+      if (list.length > 0) {
+        list.sort((a, b) => (a.order || 0) - (b.order || 0));
+        return list;
+      }
+    }
+  } catch (err) {
+    console.warn('⚠️ Error fetching gateways from RTDB:', err.message);
+  }
+  return DEFAULT_GATEWAYS;
+}
+
+async function getGateway(id) {
+  try {
+    const snap = await get(ref(rtdb, `gateways/${id}`));
+    if (snap.exists()) {
+      return { id, ...snap.val() };
+    }
+  } catch (e) {}
+  return DEFAULT_GATEWAYS.find((g) => g.id === id) || null;
+}
+
+// In-memory session state for awaiting TxID submissions
+const userSessions = new Map();
 
 // 1. /start Command Handler
 bot.command('start', async (ctx) => {
@@ -451,31 +582,223 @@ bot.callbackQuery('menu_wallet', async (ctx) => {
   }
 });
 
-// 8. Deposit Information Handler
+// 8. Dynamic Payment Gateways Deposit Handler (Image 1)
 bot.callbackQuery('wallet_deposit', async (ctx) => {
   await ctx.answerCallbackQuery();
-  const userId = ctx.from.id;
+  const gateways = await getGateways();
 
-  const text = `💳 *Deposit Instructions*\n\nTo add balance to your wallet, send payment using any of the methods below:\n\n📱 *bKash (Personal/Send Money):*\n\`${botConfig.bkashNumber || 'Contact Support'}\`\n\n⚡ *Nagad (Personal):*\n\`${botConfig.nagadNumber || 'Contact Support'}\`\n\n💎 *Binance Pay / USDT (TRC20):*\n\`${botConfig.binancePayId || 'Contact Support'}\`\n\n━━━━━━━━━━━━━━━━━━━━\n📌 *After payment, send your Telegram ID:*\n\`${userId}\` along with your payment screenshot/TrxID to our official support agent:\n👉 [${botConfig.supportUsername}](https://t.me/${botConfig.supportUsername.replace('@', '')})\n\n⚡ Your balance will be credited to your wallet within 2-5 minutes!`;
+  const text = `💸 *Add Funds to Wallet*\n\n💱 *Select your preferred payment gateway:*`;
+  const rows = [];
 
-  const reply_markup = createStyledKeyboard([
-    [
+  gateways.forEach((gw) => {
+    rows.push([
       {
-        text: '📞 Contact Support to Deposit',
-        url: `https://t.me/${botConfig.supportUsername.replace('@', '')}`,
-        style: 'success',
+        text: `${gw.icon || '🪙'} ${gw.name}`,
+        callback_data: `gate_${gw.id}`,
+        style: 'primary',
       },
-    ],
-    [
-      { text: '◀️ Back to Wallet', callback_data: 'menu_wallet', style: 'primary' },
-      { text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' },
-    ],
+    ]);
+  });
+
+  rows.push([
+    {
+      text: '↩️ Back to Wallet',
+      callback_data: 'menu_wallet',
+      style: 'danger',
+    },
   ]);
+
+  const reply_markup = createStyledKeyboard(rows);
 
   try {
     await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
   } catch (e) {
     await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+  }
+});
+
+// 8.1 Individual Payment Gateway Detail Handler (Image 2 & Image 3)
+bot.callbackQuery(/^gate_(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const gatewayId = ctx.match[1];
+  const gw = await getGateway(gatewayId);
+
+  if (!gw) {
+    return ctx.answerCallbackQuery({ text: '❌ Payment gateway not found!', show_alert: true });
+  }
+
+  const rows = [];
+
+  if (gw.type === 'uid') {
+    // Image 3 Format: Binance Pay / Bybit Pay
+    const text = `${gw.icon || '🔸'} *USDT Deposit via ${gw.name}*\n\n` +
+      `💎 *Min Deposit:* ${gw.minDeposit || '0.01 USDT'}\n` +
+      `💎 *Max Deposit:* ${gw.maxDeposit || '5.00 USDT'}\n\n` +
+      `Please send any amount within the limit to our ${gw.name} UID:\n\n` +
+      `*${gw.name} UID:*\n` +
+      `\`${gw.uid || 'Contact Support'}\`\n\n` +
+      `📌 *Note:* After sending, reply to this message with your ${gw.name} Order ID / TxID to verify ⚠️\n\n` +
+      `_It is an 18-digit number like 450754786267348992, shown on the payment in your ${gw.name} app under Pay history._\n\n` +
+      `> ⚠️ *Important:* ${gw.warning || `For more than ${gw.maxDeposit}, please use one of the other payment methods — they are credited automatically. Send only USDT via ${gw.name} to the ID above.`}`;
+
+    rows.push([
+      {
+        text: `Copy ${gw.name} UID 📋`,
+        callback_data: `copy_uid_${gw.id}`,
+        copy_text: { text: String(gw.uid || '') },
+      },
+    ]);
+    rows.push([
+      {
+        text: '✅ Submit Order ID / TxID',
+        callback_data: `submit_tx_${gw.id}`,
+        style: 'success',
+      },
+    ]);
+    rows.push([
+      {
+        text: '❌ Cancel',
+        callback_data: 'wallet_deposit',
+        style: 'danger',
+      },
+    ]);
+
+    const reply_markup = createStyledKeyboard(rows);
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+    } catch {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+    }
+  } else {
+    // Image 2 Format: Crypto Address (BEP20, Polygon, TON, LTC, etc.)
+    const text = `${gw.icon || '🔸'} *${gw.currency || 'USDT'} Deposit via ${gw.network || 'BSC (BEP20)'}*\n\n` +
+      `💎 *Min Deposit:* ${gw.minDeposit || '0.01 USDT'}\n` +
+      `💎 *Max Deposit:* ${gw.maxDeposit || '10000.00 USDT'}\n\n` +
+      `Send any amount of ${gw.currency || 'USDT'} (${gw.network || 'BEP20'}) to your personal deposit address below:\n\n` +
+      `*Your Deposit Address:*\n` +
+      `\`${gw.address || 'Contact Support'}\`\n\n` +
+      `✅ *Auto-detection enabled* — Your balance will be credited automatically within seconds after network confirmation ⚡\n\n` +
+      `> ⚠️ *Important:* ${gw.warning || `Only send ${gw.currency || 'USDT'} on ${gw.network || 'BEP20'} network. Sending other tokens or using wrong network will result in loss of funds.`}`;
+
+    rows.push([
+      {
+        text: 'Copy Address 📋',
+        callback_data: `copy_addr_${gw.id}`,
+        copy_text: { text: String(gw.address || '') },
+      },
+    ]);
+    rows.push([
+      {
+        text: '✅ I have Paid',
+        callback_data: `submit_tx_${gw.id}`,
+        style: 'success',
+      },
+    ]);
+    rows.push([
+      {
+        text: '◀️ Back to Deposit',
+        callback_data: 'wallet_deposit',
+        style: 'primary',
+      },
+    ]);
+
+    const reply_markup = createStyledKeyboard(rows);
+    try {
+      await ctx.editMessageText(text, { parse_mode: 'Markdown', reply_markup });
+    } catch {
+      await ctx.reply(text, { parse_mode: 'Markdown', reply_markup });
+    }
+  }
+});
+
+// 8.2 Copy Button Callback fallback
+bot.callbackQuery(/^copy_(addr|uid)_(.+)$/, async (ctx) => {
+  const type = ctx.match[1];
+  const gatewayId = ctx.match[2];
+  const gw = await getGateway(gatewayId);
+  const value = type === 'uid' ? (gw?.uid || '') : (gw?.address || '');
+  await ctx.answerCallbackQuery({
+    text: `📋 ${value}`,
+    show_alert: true,
+  });
+});
+
+// 8.3 "I have Paid" / "Submit TxID" Trigger Handler
+bot.callbackQuery(/^submit_tx_(.+)$/, async (ctx) => {
+  await ctx.answerCallbackQuery();
+  const gatewayId = ctx.match[1];
+  const gw = await getGateway(gatewayId);
+  const userId = ctx.from.id;
+
+  // Set user state to wait for incoming TxID text
+  userSessions.set(userId, {
+    awaitingTxFor: gatewayId,
+    gatewayName: gw ? gw.name : 'Payment Gateway',
+    timestamp: Date.now(),
+  });
+
+  const promptText = `📝 *Submit Payment Verification*\n\n` +
+    `Gateway: *${gw?.name || 'Selected Gateway'}*\n\n` +
+    `👇 *Please reply to this chat with your Transaction Hash (TxID) or Binance Order ID:*\n\n` +
+    `_Example:_ \`450754786267348992\` or \`0x71c...3a4\`\n\n` +
+    `Once you send the ID, it will be automatically sent to the admin team for verification!`;
+
+  const reply_markup = createStyledKeyboard([
+    [{ text: '❌ Cancel', callback_data: `gate_${gatewayId}`, style: 'danger' }],
+  ]);
+
+  try {
+    await ctx.editMessageText(promptText, { parse_mode: 'Markdown', reply_markup });
+  } catch {
+    await ctx.reply(promptText, { parse_mode: 'Markdown', reply_markup });
+  }
+});
+
+// 8.4 Message Text Listener: Receives TxID and Saves Deposit Request to Firebase
+bot.on('message:text', async (ctx) => {
+  const text = ctx.message.text.trim();
+  if (text.startsWith('/')) return; // Ignore slash commands
+
+  const userId = ctx.from.id;
+  const session = userSessions.get(userId);
+
+  if (session && session.awaitingTxFor) {
+    const txId = text;
+    const gatewayId = session.awaitingTxFor;
+    const gatewayName = session.gatewayName;
+    userSessions.delete(userId);
+
+    const depId = `dep_${Date.now()}`;
+    const depositData = {
+      id: depId,
+      userId: String(userId),
+      userName: ctx.from.first_name || ctx.from.username || 'User',
+      gatewayId: gatewayId,
+      gatewayName: gatewayName,
+      txId: txId,
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    try {
+      await set(ref(rtdb, `deposits/${depId}`), depositData);
+
+      const confirmMsg = `🎉 *Payment Submitted for Verification!*\n\n` +
+        `💎 *Gateway:* *${gatewayName}*\n` +
+        `📌 *Transaction ID / Order ID:*\n\`${txId}\`\n\n` +
+        `✅ Your payment details have been sent to our admin panel for live verification.\n` +
+        `⚡ Your wallet balance will be credited automatically within minutes after confirmation!`;
+
+      const reply_markup = createStyledKeyboard([
+        [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
+        [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+      ]);
+
+      return ctx.reply(confirmMsg, { parse_mode: 'Markdown', reply_markup });
+    } catch (err) {
+      console.error('Error saving deposit to RTDB:', err.message);
+      return ctx.reply('⚠️ Error saving your transaction verification. Please contact support.');
+    }
   }
 });
 

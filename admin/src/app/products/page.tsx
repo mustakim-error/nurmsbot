@@ -28,6 +28,7 @@ import {
   DialogDescription, 
   DialogFooter 
 } from '@/components/ui/dialog';
+import { BRAND_PRESETS, POPULAR_EMOJIS } from '@/lib/brandIcons';
 
 interface Product {
   id: string;
@@ -296,6 +297,32 @@ export default function ProductsPage() {
           </DialogHeader>
 
           <form onSubmit={handleSave} className="space-y-4 py-2 text-xs">
+            {/* Brand Presets Quick-Select */}
+            <div>
+              <label className="block font-medium text-foreground mb-1 text-[11px] text-muted-foreground uppercase tracking-wider">
+                ⚡ Quick Brand & Icon Presets (1-Click Fill)
+              </label>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1.5 rounded-lg bg-secondary/30 border">
+                {BRAND_PRESETS.map((bp) => (
+                  <button
+                    key={bp.id}
+                    type="button"
+                    onClick={() => {
+                      setFormData({
+                        ...formData,
+                        name: formData.name ? formData.name : bp.name,
+                        icon: bp.emoji,
+                      });
+                    }}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded bg-card/80 hover:bg-primary/20 border border-border hover:border-primary/50 text-[11px] font-medium transition-colors"
+                  >
+                    <span>{bp.emoji}</span>
+                    <span>{bp.name}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="grid grid-cols-4 gap-2">
               <div className="col-span-3">
                 <label className="block font-medium text-foreground mb-1">Product Title</label>
@@ -313,6 +340,38 @@ export default function ProductsPage() {
                   value={formData.icon}
                   onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
                 />
+              </div>
+            </div>
+
+            {/* Popular Emoji Bar */}
+            <div>
+              <div className="flex flex-wrap gap-1 items-center p-1.5 rounded bg-muted/40 border">
+                <span className="text-[10px] text-muted-foreground mr-1 font-mono">Pick:</span>
+                {POPULAR_EMOJIS.slice(0, 15).map((em) => (
+                  <button
+                    key={em}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, icon: em })}
+                    className="w-6 h-6 flex items-center justify-center rounded hover:bg-secondary text-sm transition-transform hover:scale-125"
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Live Telegram Button Preview */}
+            <div className="p-2.5 rounded-lg bg-card/80 border space-y-1">
+              <div className="flex justify-between items-center text-[10px] text-muted-foreground font-mono uppercase">
+                <span>Telegram Bot Button Preview</span>
+                <span className="text-emerald-400 font-bold">Native Style</span>
+              </div>
+              <div className={`py-2 px-3 rounded-lg text-center font-bold text-xs border shadow-sm transition-all ${
+                Number(formData.stock) > 0 
+                  ? 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50' 
+                  : 'bg-red-600/30 text-red-300 border-red-500/50'
+              }`}>
+                {formData.icon || '✨'} {formData.name || 'Product Title'} - {Number(formData.price) === 0 ? '0' : `$${Number(formData.price).toFixed(2)}`}
               </div>
             </div>
 
