@@ -316,12 +316,12 @@ const BRAND_ICON_MAP = {
   // Crypto Gateways & Tokens
   binance: '🔸',
   bnb: '🔸',
-  bybit: '🟡',
-  usdt: '🟢',
-  tether: '🟢',
-  bep20: '🟡',
-  bsc: '🟡',
-  trc20: '🔴',
+  bybit: '⚡',
+  usdt: '₮',
+  tether: '₮',
+  bep20: '₮',
+  bsc: '₮',
+  trc20: '₮',
   tron: '🔴',
   trx: '🔴',
   polygon: '🟣',
@@ -600,8 +600,8 @@ const DEFAULT_GATEWAYS = [
     uid: '1233668018',
     warning: 'For more than 5.00 USDT, please use one of the other payment methods — they are credited automatically. Send only USDT via Binance Pay to the ID above.',
     active: true,
-    autoApprove: true,
-    autoApproveAmount: 5.0,
+    autoApprove: false,
+    autoApproveAmount: 0,
   },
   {
     id: 'bybit-pay',
@@ -615,8 +615,8 @@ const DEFAULT_GATEWAYS = [
     uid: '987654321',
     warning: 'Send USDT via Bybit internal transfer to the UID above and submit your Transaction ID.',
     active: true,
-    autoApprove: true,
-    autoApproveAmount: 5.0,
+    autoApprove: false,
+    autoApproveAmount: 0,
   },
   {
     id: 'ltc',
@@ -1367,8 +1367,10 @@ bot.callbackQuery('wallet_deposit', async (ctx) => {
 
   gateways.forEach((gw) => {
     const customEmojiId = resolveCustomEmojiId(gw);
+    const sym = getButtonIcon(gw.icon || gw.emoji || gw.id, gw.name) || '₮';
+    const label = `${sym} ${gw.name}`;
     const btnObj = {
-      text: gw.name,
+      text: label,
       callback_data: `gate_${gw.id}`,
       style: 'primary',
     };
@@ -1602,10 +1604,12 @@ bot.on('message:text', async (ctx) => {
 
   // 2. Handle Deposit TxID / Order ID Submission
   if (session && session.awaitingTxFor) {
-    const rawInput = text;
-    const parts = rawInput.split(/\s+/);
-    const txId = parts[0];
-    let typedAmount = parts[1] ? parseFloat(parts[1].replace(/[^0-9.]/g, '')) : null;
+    const rawInput = text.trim();
+    // Normalize input: strip "txid:", "order id:", "#", spaces, dashes
+    const cleanText = rawInput.replace(/^(txid|order\s*id|transaction\s*id|hash|ref|order)\s*[:=-]?\s*/i, '').trim();
+    const parts = cleanText.split(/\s+/);
+    const rawTx = parts[0] || cleanText;
+    const normalizedTxId = rawTx.replace(/^0x/i, '').replace(/^#/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
 
     const gatewayId = session.awaitingTxFor;
     const gatewayName = session.gatewayName;
@@ -1613,22 +1617,65 @@ bot.on('message:text', async (ctx) => {
 
     const gw = await getGateway(gatewayId);
 
-    // 1. Double-Spend / Duplicate Check
-    const safeTxKey = txId.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    const processedRef = ref(rtdb, `processed_txs/${safeTxKey}`);
+    if (!normalizedTxId || normalizedTxId.length < 8) {
+      return ctx.reply('⚠️ *Invalid Transaction ID / Order ID!*\n\nPlease provide a valid Transaction Hash or Exchange Order ID.', {
+        parse_mode: 'Markdown',
+        reply_markup: createStyledKeyboard([
+          [{ text: '◀️ Back to Deposit', callback_data: `gate_${gatewayId}`, style: 'primary' }],
+          [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
+        ]),
+      });
+    }
+
+    // 1. Comprehensive Double-Spend & Duplicate Check across processed_txs AND all deposits
+    const processedRef = ref(rtdb, `processed_txs/${normalizedTxId}`);
     const processedSnap = await get(processedRef);
 
-    if (processedSnap.exists()) {
-      const p = processedSnap.val();
+    let isDuplicate = processedSnap.exists();
+    let dupDetails = processedSnap.exists() ? processedSnap.val() : null;
+
+    if (!isDuplicate) {
+      try {
+        const depositsSnap = await get(ref(rtdb, 'deposits'));
+        if (depositsSnap.exists()) {
+          const allDeps = depositsSnap.val();
+          for (const [k, d] of Object.entries(allDeps)) {
+            const existingNorm = String(d.txId || '').replace(/^0x/i, '').replace(/^#/i, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            if (existingNorm === normalizedTxId) {
+              isDuplicate = true;
+              dupDetails = d;
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Error checking deposits for duplicates:', err.message);
+      }
+    }
+
+    if (isDuplicate) {
+      const dupStatus = (dupDetails?.status || 'already submitted').toUpperCase();
       const duplicateMsg = `❌ *Duplicate Transaction ID Detected!*\n\n` +
-        `This Transaction ID / Order ID has already been credited to account \`${p.userId}\` on ${new Date(p.verifiedAt || Date.now()).toLocaleString()}.\n\n` +
-        `⚠️ *Replay submissions are not permitted.* If you made a new payment, please ensure you copy the new Transaction Hash / Order ID.`;
+        `This Transaction ID / Order ID (\`${rawTx}\`) has already been submitted on our platform.\n\n` +
+        `• *Current Status:* \`${dupStatus}\`\n` +
+        `• *Account:* \`${dupDetails?.userId || 'User'}\`\n\n` +
+        `⚠️ *Replay submissions are strictly prohibited.* If you made a new payment, please submit the unique new Transaction Hash / Order ID.`;
       const reply_markup = createStyledKeyboard([
         [{ text: '◀️ Back to Deposit', callback_data: `gate_${gatewayId}`, style: 'primary' }],
         [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
       ]);
       return ctx.reply(duplicateMsg, { parse_mode: 'Markdown', reply_markup });
     }
+
+    // IMMEDIATELY lock this normalizedTxId in processed_txs so concurrent or repeat attempts are instantly blocked!
+    await set(processedRef, {
+      txId: rawTx,
+      normalizedTxId: normalizedTxId,
+      userId: String(userId),
+      gatewayId: gatewayId,
+      status: 'pending',
+      submittedAt: new Date().toISOString(),
+    });
 
     const depId = `dep_${Date.now()}`;
     const depositData = {
@@ -1637,7 +1684,7 @@ bot.on('message:text', async (ctx) => {
       userName: ctx.from.first_name || ctx.from.username || 'User',
       gatewayId: gatewayId,
       gatewayName: gatewayName,
-      txId: txId,
+      txId: rawTx,
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
@@ -1909,80 +1956,15 @@ bot.on('message:text', async (ctx) => {
       }
     }
 
-    // 5. Fallback Instant Auto-Approve if API key is not configured but autoApprove is enabled
-    if (gw && gw.type === 'uid' && gw.autoApprove && !gw.apiKey) {
-      // Validate order ID / transfer ID format (16-20 digits)
-      const isValidOrderId = /^\d{16,20}$/.test(txId);
-      if (isValidOrderId) {
-        const defaultCredit = Number(gw.autoApproveAmount) || 5.0;
-        const maxLimit = parseFloat(gw.maxDeposit) || 10.0;
-        const amountToCredit = Math.min(typedAmount || defaultCredit, maxLimit);
-
-        const userSnap = await get(ref(rtdb, `users/${userId}`));
-        const currentBal = Number(userSnap.val()?.balance || 0);
-        const newBal = currentBal + amountToCredit;
-
-        await update(ref(rtdb, `users/${userId}`), {
-          balance: newBal,
-          updatedAt: new Date().toISOString(),
-        });
-
-        await set(ref(rtdb, `deposits/${depId}`), {
-          ...depositData,
-          status: 'approved',
-          amount: amountToCredit,
-          creditedBalance: newBal,
-          autoVerified: true,
-          method: 'uid_auto',
-          updatedAt: new Date().toISOString(),
-        });
-
-        await set(processedRef, {
-          txId: txId,
-          userId: String(userId),
-          amount: amountToCredit,
-          gatewayId: gatewayId,
-          verifiedAt: new Date().toISOString(),
-          method: 'uid_auto',
-        });
-
-        await recordTransaction({
-          type: 'deposit',
-          userId: String(userId),
-          userName: ctx.from.first_name || ctx.from.username || 'Member',
-          amount: amountToCredit,
-          gateway: gatewayName,
-          txId: txId,
-          balanceAfter: newBal,
-          note: `Auto-deposit via ${gatewayName}`,
-        });
-
-        const successMsg = `⚡ *${gatewayName} Payment Approved Automatically!*\n\n` +
-          `💎 *Gateway:* *${gatewayName}*\n` +
-          `💰 *Credited Amount:* *$${amountToCredit.toFixed(2)} USDT*\n` +
-          `🪙 *New Wallet Balance:* *$${newBal.toFixed(2)}*\n` +
-          `📌 *Order ID:*\n\`${txId}\`\n\n` +
-          `🎉 Instant verification successful! You can now use your balance to buy any product.`;
-
-        const reply_markup = createStyledKeyboard([
-          [{ text: '🛒 Browse Shop', callback_data: 'menu_shop', style: 'success' }],
-          [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],
-          [{ text: '🏠 Main Menu', callback_data: 'back_to_menu', style: 'primary' }],
-        ]);
-
-        return ctx.reply(successMsg, { parse_mode: 'Markdown', reply_markup });
-      }
-    }
-
-    // 4. Default: Save as Pending for 1-Click Admin Approval
+    // 4. Default: Save as Pending for 1-Click Admin Approval (No unverified fake auto-credits!)
     try {
       await set(ref(rtdb, `deposits/${depId}`), depositData);
 
-      const confirmMsg = `🎉 *Payment Submitted for Verification!*\n\n` +
+      const confirmMsg = `⏳ *Payment Submitted for Admin Verification!*\n\n` +
         `💎 *Gateway:* *${gatewayName}*\n` +
-        `📌 *Transaction ID / Order ID:*\n\`${txId}\`\n\n` +
-        `✅ Your payment details have been sent to our admin panel for live 1-click verification.\n` +
-        `⚡ Your wallet balance will be credited automatically within minutes after confirmation!`;
+        `📌 *Transaction ID / Order ID:*\n\`${rawTx}\`\n\n` +
+        `✅ Your payment details have been sent to our admin panel for live verification.\n` +
+        `⚡ Once verified by admin, your wallet balance will be credited instantly!`;
 
       const reply_markup = createStyledKeyboard([
         [{ text: '💰 View Wallet', callback_data: 'menu_wallet', style: 'primary' }],

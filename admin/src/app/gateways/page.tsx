@@ -149,8 +149,8 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
     warning: 'For more than 5.00 USDT, please use one of the other payment methods — they are credited automatically. Send only USDT via Binance Pay to the ID above.',
     active: true,
     order: 5,
-    autoApprove: true,
-    autoApproveAmount: 5.0,
+    autoApprove: false,
+    autoApproveAmount: 0,
   },
   {
     id: 'bybit-pay',
@@ -165,8 +165,8 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
     warning: 'Send USDT via Bybit internal transfer to the UID above and submit your Transaction ID.',
     active: true,
     order: 6,
-    autoApprove: true,
-    autoApproveAmount: 5.0,
+    autoApprove: false,
+    autoApproveAmount: 0,
   },
   {
     id: 'ltc',
@@ -581,6 +581,16 @@ export default function GatewaysPage() {
         status: 'rejected',
         updatedAt: new Date().toISOString(),
       });
+      const safeTxKey = dep.txId.toLowerCase().replace(/^0x/i, '').replace(/^#/i, '').replace(/[^a-z0-9]/g, '');
+      if (safeTxKey) {
+        await set(ref(rtdb, `processed_txs/${safeTxKey}`), {
+          txId: dep.txId,
+          userId: dep.userId,
+          status: 'rejected',
+          verifiedAt: new Date().toISOString(),
+          method: 'admin_rejected',
+        });
+      }
     }
   };
 
