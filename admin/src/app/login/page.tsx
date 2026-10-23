@@ -1,22 +1,15 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { 
   ShieldCheck, 
   ShieldAlert,
-  Lock, 
-  ArrowRight, 
   RadioTower, 
-  Sparkles,
-  AlertCircle,
-  Copy,
-  Check,
-  RotateCcw,
-  ExternalLink
+  AlertCircle
 } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
+import { Card, CardHeader, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 
@@ -44,19 +37,29 @@ function GoogleIconSvg({ className = "w-5 h-5" }: { className?: string }) {
 }
 
 export default function LoginPage() {
-  const { loginWithGoogle, isBlocked, blockedInfo, unblockBrowser } = useAuth();
+  const { loginWithGoogle, isBlocked, unblockBrowser } = useAuth();
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rejectedUid, setRejectedUid] = useState<string | null>(null);
-  const [copiedUid, setCopiedUid] = useState(false);
+
+  // Secret reset query: /login?unlock=true or /login?reset=true
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('unlock') === 'true' || params.get('reset') === 'true') {
+        unblockBrowser();
+        router.replace('/login');
+      }
+    }
+  }, [unblockBrowser, router]);
+
+  const handleSecretReset = () => {
+    unblockBrowser();
+  };
 
   const handleGoogleLogin = async () => {
-    if (isBlocked) {
-      setError('Access Denied: This browser is permanently locked. Unauthorized accounts cannot retry.');
-      return;
-    }
+    if (isBlocked) return;
 
     setError(null);
     setLoading(true);
@@ -66,9 +69,8 @@ export default function LoginPage() {
       if (res.success) {
         router.replace('/');
       } else {
-        setError(res.error || 'Authentication rejected. You are not authorized.');
-        if (res.uid) {
-          setRejectedUid(res.uid);
+        if (!res.blocked) {
+          setError(res.error || 'Authentication rejected.');
         }
       }
     } catch (err: any) {
@@ -78,12 +80,45 @@ export default function LoginPage() {
     }
   };
 
-  const handleCopyUid = (uid: string) => {
-    navigator.clipboard.writeText(uid);
-    setCopiedUid(true);
-    setTimeout(() => setCopiedUid(false), 2000);
-  };
+  // 1. FULL PAGE RED "ACCESS DENIED" (When unauthorized/blocked)
+  if (isBlocked) {
+    return (
+      <div className="fixed inset-0 z-50 min-h-screen w-full flex flex-col items-center justify-center p-6 bg-[#0a0002] relative overflow-hidden select-none">
+        {/* Full Screen Deep Crimson & Red Glow */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(220,38,38,0.28)_0%,_rgba(153,27,27,0.18)_42%,_rgba(10,0,2,1)_85%)] pointer-events-none" />
+        
+        {/* Full Screen Red Alert Vignette */}
+        <div className="absolute inset-0 shadow-[inset_0_0_140px_rgba(239,68,68,0.45)] pointer-events-none animate-pulse" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-red-600/20 rounded-full blur-[150px] pointer-events-none" />
 
+        {/* Center Access Denied Content */}
+        <div className="relative z-10 flex flex-col items-center text-center max-w-lg mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
+          <div 
+            onClick={handleSecretReset}
+            className="w-24 h-24 rounded-3xl bg-red-950/80 border-2 border-red-500/50 flex items-center justify-center shadow-[0_0_50px_rgba(239,68,68,0.5)] cursor-default transition-transform active:scale-95"
+            title=""
+          >
+            <ShieldAlert className="w-12 h-12 text-red-500 drop-shadow-[0_0_20px_rgba(239,68,68,0.9)] animate-pulse" />
+          </div>
+
+          <div className="space-y-3">
+            <h1 className="text-4xl sm:text-6xl md:text-7xl font-black tracking-widest text-red-500 drop-shadow-[0_0_40px_rgba(239,68,68,0.8)] font-mono uppercase">
+              ACCESS DENIED
+            </h1>
+            <div className="inline-block px-4 py-1.5 rounded-full bg-red-500/10 border border-red-500/30 text-red-400 font-mono text-xs sm:text-sm tracking-[0.3em] uppercase font-bold">
+              403 • RESTRICTED ACCESS
+            </div>
+          </div>
+
+          <p className="text-sm text-red-300/60 font-mono tracking-wider max-w-xs">
+            You do not have permission to access this administrative portal.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Normal Login View
   return (
     <div className="min-h-screen w-full flex items-center justify-center p-4 bg-[#080c14] relative overflow-hidden select-none">
       {/* Background Ambient Glows */}
@@ -95,71 +130,28 @@ export default function LoginPage() {
       <div className="w-full max-w-md relative z-10 animate-in fade-in-50 zoom-in-95 duration-300">
         <Card className="glass-panel border border-border/80 shadow-2xl backdrop-blur-2xl bg-card/70 overflow-hidden">
           {/* Card Top Strip */}
-          <div className={`h-1.5 w-full ${isBlocked ? 'bg-rose-500' : 'bg-gradient-to-r from-primary via-emerald-400 to-blue-500'}`} />
+          <div className="h-1.5 w-full bg-gradient-to-r from-primary via-emerald-400 to-blue-500" />
 
           <CardHeader className="text-center pt-8 pb-5 space-y-2">
-            <div className={`mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-2 transition-all ${
-              isBlocked 
-                ? 'bg-rose-500/10 border border-rose-500/30 text-rose-400 shadow-rose-500/10 animate-pulse' 
-                : 'bg-primary/10 border border-primary/20 text-primary shadow-primary/10'
-            }`}>
-              {isBlocked ? <ShieldAlert className="w-8 h-8" /> : <ShieldCheck className="w-8 h-8" />}
+            <div className="mx-auto w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg mb-2 transition-all bg-primary/10 border border-primary/20 text-primary shadow-primary/10">
+              <ShieldCheck className="w-8 h-8" />
             </div>
 
             <div className="flex items-center justify-center gap-2">
               <span className="font-bold text-2xl tracking-wide text-white">NURMS</span>
-              <Badge variant={isBlocked ? "destructive" : "default"} className="text-[10px] px-2 py-0.5">
-                {isBlocked ? 'Access Denied' : 'Admin Portal'}
+              <Badge variant="default" className="text-[10px] px-2 py-0.5">
+                Admin Portal
               </Badge>
             </div>
 
             <CardDescription className="text-xs text-muted-foreground max-w-sm mx-auto">
-              {isBlocked
-                ? 'Access to this administrative portal is restricted. Your Gmail account is not recognized as a registered Super Admin.'
-                : 'Direct 1-Click Google Authentication. Only Gmail accounts verified in Firebase Realtime Database (`admins/{uid}: true`) are granted access.'}
+              Administrative gateway protected by Firebase Authentication. Sign in with your registered administrator Gmail.
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {/* Blocked State Alert */}
-            {isBlocked && (
-              <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 space-y-3">
-                <div className="flex items-start gap-2.5">
-                  <ShieldAlert className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-bold text-xs text-white">Account Permanently Blocked</h4>
-                    <p className="text-[11px] text-rose-200/90 mt-0.5">
-                      {blockedInfo?.reason || 'Unauthorized Gmail account. Attempts from this browser are locked in localStorage.'}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Show UID with 1-Click Copy */}
-                {(blockedInfo?.uid || rejectedUid) && (
-                  <div className="p-2.5 rounded-lg bg-black/50 border border-rose-500/20 space-y-1.5">
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground font-mono">
-                      <span>YOUR FIREBASE AUTH UID:</span>
-                      <button
-                        onClick={() => handleCopyUid(blockedInfo?.uid || rejectedUid || '')}
-                        className="text-primary hover:text-white flex items-center gap-1 font-sans"
-                      >
-                        {copiedUid ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                        {copiedUid ? 'Copied!' : 'Copy UID'}
-                      </button>
-                    </div>
-                    <code className="block p-1.5 rounded bg-black/80 font-mono text-[11px] text-amber-300 break-all border border-border/50">
-                      {blockedInfo?.uid || rejectedUid}
-                    </code>
-                    <p className="text-[10px] text-muted-foreground leading-tight pt-1">
-                      💡 To grant access, open Firebase Realtime Database and add: <code className="text-emerald-400">admins/{"<UID>"}: true</code>
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* General Error Message */}
-            {error && !isBlocked && (
+            {error && (
               <div className="p-3 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs flex items-center gap-2 animate-in fade-in">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <span>{error}</span>
@@ -171,22 +163,13 @@ export default function LoginPage() {
               <Button
                 type="button"
                 onClick={handleGoogleLogin}
-                disabled={loading || isBlocked}
-                className={`w-full h-12 text-sm font-bold transition-all flex items-center justify-center gap-3 rounded-xl shadow-lg ${
-                  isBlocked
-                    ? 'bg-secondary/40 text-muted-foreground border border-border/50 cursor-not-allowed opacity-60'
-                    : 'bg-white hover:bg-slate-100 text-slate-900 shadow-white/10 active:scale-[0.98]'
-                }`}
+                disabled={loading}
+                className="w-full h-12 text-sm font-bold transition-all flex items-center justify-center gap-3 rounded-xl shadow-lg bg-white hover:bg-slate-100 text-slate-900 shadow-white/10 active:scale-[0.98]"
               >
                 {loading ? (
                   <>
                     <RadioTower className="w-5 h-5 text-primary animate-spin" />
-                    <span>Verifying Admin UID with Firebase...</span>
-                  </>
-                ) : isBlocked ? (
-                  <>
-                    <Lock className="w-5 h-5 text-rose-400" />
-                    <span>Login Blocked (Unauthorized Account)</span>
+                    <span>Verifying Administrator Access...</span>
                   </>
                 ) : (
                   <>
@@ -196,43 +179,12 @@ export default function LoginPage() {
                 )}
               </Button>
             </div>
-
-            {/* How it works info card */}
-            <div className="p-3 rounded-xl bg-secondary/30 border border-border/60 text-[11px] text-muted-foreground space-y-1.5">
-              <div className="flex items-center gap-1.5 text-white font-semibold">
-                <Sparkles className="w-3.5 h-3.5 text-primary" />
-                <span>Zero-Password Direct Google Auth</span>
-              </div>
-              <p className="leading-relaxed">
-                Clicking the button above opens official Google sign-in. Your UID is instantly checked against <code className="text-primary font-mono">admins/{"{uid}"}: true</code> in Realtime Database.
-              </p>
-            </div>
-
-            {/* Unblock Button for System Administrator */}
-            {isBlocked && (
-              <div className="pt-1 text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm('Did you add your UID to Firebase Realtime Database (admins/<uid>: true)? Click OK to clear browser block and retry.')) {
-                      unblockBrowser();
-                      setError(null);
-                      setRejectedUid(null);
-                    }
-                  }}
-                  className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center justify-center gap-1.5 mx-auto"
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Added UID in Firebase? Reset Browser Block</span>
-                </button>
-              </div>
-            )}
           </CardContent>
 
           <CardFooter className="pt-2 pb-6 border-t border-border/40 flex flex-col space-y-1">
             <div className="text-center text-[10px] text-muted-foreground flex items-center justify-center gap-1">
               <ShieldCheck className="w-3 h-3 text-emerald-400" />
-              Protected by Firebase Realtime Database Rules (`admins/$uid: true`)
+              Protected by Firebase Realtime Database Security Rules
             </div>
           </CardFooter>
         </Card>
