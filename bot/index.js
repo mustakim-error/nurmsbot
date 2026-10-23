@@ -5,7 +5,11 @@ const { rtdb } = require('./firebase');
 const { ref, get, set, update, onValue } = require('firebase/database');
 
 // Default Token embedded so Render needs zero configuration!
-const token = process.env.BOT_TOKEN || '8711373245:AAHZMSBwkhKrNjsyj5yQRYdw0E2YgVvpzWk';
+const defaultToken = '8711373245:AAHZMSBwkhKrNjsyj5yQRYdw0E2YgVvpzWk';
+let token = process.env.BOT_TOKEN || defaultToken;
+if (token.includes('AAGRz0PbAJ9tzac3VVr8zg_UBrIloXCT_fg')) {
+  token = defaultToken;
+}
 
 const bot = new Bot(token);
 
