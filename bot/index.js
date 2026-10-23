@@ -580,7 +580,7 @@ bot.callbackQuery('menu_about', async (ctx) => {
 // 🌐 24/7 CRON & KEEP-ALIVE SYSTEM
 // =======================================================
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 // Enable CORS so the Admin Portal can ping and monitor the bot directly from the browser
 app.use((req, res, next) => {
@@ -642,8 +642,20 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🌐 24/7 Keep-alive server running on port ${PORT}`);
+});
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    const nextPort = Number(PORT) + 1;
+    console.warn(`⚠️ Port ${PORT} already in use. Retrying on port ${nextPort}...`);
+    app.listen(nextPort, () => {
+      console.log(`🌐 24/7 Keep-alive server running on fallback port ${nextPort}`);
+    });
+  } else {
+    console.error('⚠️ Express server error:', err.message);
+  }
 });
 
 // 4. Live Heartbeat to Firebase RTDB (every 30 seconds)
