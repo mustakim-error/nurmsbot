@@ -31,8 +31,11 @@ import {
   TrendingUp,
   Shield,
   Headphones,
-  Info
+  Info,
+  Plus,
+  Trash2
 } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -115,9 +118,20 @@ export default function SettingsPage() {
       }
     });
 
+    // Listen to registered admin UIDs
+    const adminsRef = ref(rtdb, 'admins');
+    const unsubscribeAdmins = onValue(adminsRef, (snapshot) => {
+      if (snapshot.exists()) {
+        setAdminUids(snapshot.val());
+      } else {
+        setAdminUids({});
+      }
+    });
+
     return () => {
       unsubscribeConfig();
       unsubscribeHeartbeat();
+      unsubscribeAdmins();
     };
   }, []);
 
@@ -145,24 +159,31 @@ export default function SettingsPage() {
     return 'bg-blue-600/30 text-blue-400 border-blue-500/40';
   };
 
-  // Security Rules & Master Password state
+  // Current Logged-in Admin & Admin UIDs state
+  const { user: currentAdmin } = useAuth();
   const [copiedRules, setCopiedRules] = useState(false);
-  const [adminEmail, setAdminEmail] = useState('admin@nurms.com');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [updatingPassword, setUpdatingPassword] = useState(false);
-  const [passwordUpdated, setPasswordUpdated] = useState(false);
+  const [adminUids, setAdminUids] = useState<Record<string, any>>({});
+  const [newAdminUid, setNewAdminUid] = useState('');
+  const [addingAdmin, setAddingAdmin] = useState(false);
+  const [copiedMyUid, setCopiedMyUid] = useState(false);
 
   const FIREBASE_RULES_JSON = `{
   "rules": {
     ".read": "auth != null",
     ".write": "auth != null",
+    "admins": {
+      ".read": "auth != null",
+      "$uid": {
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || !root.child('admins').exists())"
+      }
+    },
     "products": {
       ".read": true,
-      ".write": "auth != null"
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || !root.child('admins').exists())"
     },
     "gateways": {
       ".read": true,
-      ".write": "auth != null"
+      ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || !root.child('admins').exists())"
     },
     "status": {
       ".read": true,
@@ -171,11 +192,11 @@ export default function SettingsPage() {
     "settings": {
       "bot_config": {
         ".read": true,
-        ".write": "auth != null"
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || !root.child('admins').exists())"
       },
       "admin_auth": {
-        ".read": "auth != null",
-        ".write": "auth != null"
+        ".read": "auth != null && (root.child('admins').child(auth.uid).val() === true || !root.child('admins').exists())",
+        ".write": "auth != null && (root.child('admins').child(auth.uid).val() === true || !root.child('admins').exists())"
       }
     },
     "users": {
@@ -203,28 +224,29 @@ export default function SettingsPage() {
   }
 }`;
 
-  const handleUpdateAdminPassword = async (e: React.FormEvent) => {
+  const handleAddAdminUid = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!adminPassword || adminPassword.length < 5) {
-      alert('Password must be at least 5 characters long.');
-      return;
-    }
-    setUpdatingPassword(true);
+    const cleanUid = newAdminUid.trim();
+    if (!cleanUid) return;
+    setAddingAdmin(true);
     try {
-      const authRef = ref(rtdb, 'settings/admin_auth');
-      await set(authRef, {
-        email: adminEmail,
-        master_key: adminPassword,
-        updatedAt: new Date().toISOString(),
-      });
-      setPasswordUpdated(true);
-      setTimeout(() => setPasswordUpdated(false), 3000);
-      setAdminPassword('');
-      alert('Admin master credentials updated successfully in Firebase!');
+      await set(ref(rtdb, `admins/${cleanUid}`), true);
+      setNewAdminUid('');
+      alert(`Admin UID (${cleanUid}) granted super admin access successfully!`);
     } catch (err: any) {
-      alert(`Error updating credentials: ${err.message}`);
+      alert(`Error granting admin UID: ${err.message}`);
     } finally {
-      setUpdatingPassword(false);
+      setAddingAdmin(false);
+    }
+  };
+
+  const handleRemoveAdminUid = async (targetUid: string) => {
+    if (confirm(`Revoke admin access for UID: ${targetUid}?`)) {
+      try {
+        await (await import('firebase/database')).remove(ref(rtdb, `admins/${targetUid}`));
+      } catch (err: any) {
+        alert(`Error revoking admin: ${err.message}`);
+      }
     }
   };
 
@@ -962,62 +984,141 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
 
-              {/* Card 2: Update Admin Master Credentials */}
+              {/* Card 2: Firebase Realtime Database Admin UIDs Manager */}
               <Card className="glass-panel">
                 <CardHeader>
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <Key className="w-4 h-4 text-primary" />
-                    Admin Master Password & Access Control
+                    <ShieldCheck className="w-4 h-4 text-primary" />
+                    Authorized Super Admin UIDs (&apos;admins/&#123;uid&#125;: true&apos;)
                   </CardTitle>
                   <CardDescription>
-                    Update the super administrator login credentials stored securely in Firebase RTDB.
+                    Only Google accounts whose Firebase Auth UID is registered here can log in and access the Admin Portal.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4 text-xs">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block font-semibold text-foreground mb-1">
-                        Admin Login Email
-                      </label>
-                      <Input
-                        value={adminEmail}
-                        onChange={(e) => setAdminEmail(e.target.value)}
-                        placeholder="admin@nurms.com"
-                        className="font-mono text-xs"
-                      />
+                  {/* Current Admin's UID Card */}
+                  {currentAdmin && (
+                    <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <div className="font-semibold text-white flex items-center gap-2">
+                          <span>Your Active Session:</span>
+                          <Badge variant="default" className="text-[10px] bg-primary text-black">
+                            {currentAdmin.email}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                          UID: <span className="text-primary font-bold">{currentAdmin.uid}</span>
+                        </p>
+                      </div>
+
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(currentAdmin.uid);
+                          setCopiedMyUid(true);
+                          setTimeout(() => setCopiedMyUid(false), 2000);
+                        }}
+                        size="sm"
+                        variant="outline"
+                        className="text-xs gap-1.5 h-8 shrink-0"
+                      >
+                        {copiedMyUid ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                        {copiedMyUid ? 'Copied UID!' : 'Copy My UID'}
+                      </Button>
                     </div>
-                    <div>
-                      <label className="block font-semibold text-foreground mb-1">
-                        New Master Password
-                      </label>
+                  )}
+
+                  {/* Add New Admin UID Form */}
+                  <div className="p-3 rounded-lg border bg-secondary/30 space-y-2">
+                    <label className="block font-semibold text-foreground text-xs">
+                      Grant Admin Access to a New Firebase Auth UID
+                    </label>
+                    <div className="flex gap-2">
                       <Input
-                        type="password"
-                        value={adminPassword}
-                        onChange={(e) => setAdminPassword(e.target.value)}
-                        placeholder="Enter new strong password"
-                        className="font-mono text-xs"
+                        placeholder="Paste Firebase User UID (e.g. 7xK9pqLmN2aB3c4d5e...)"
+                        value={newAdminUid}
+                        onChange={(e) => setNewAdminUid(e.target.value)}
+                        className="font-mono text-xs h-9"
                       />
+                      <Button
+                        type="button"
+                        onClick={handleAddAdminUid}
+                        disabled={addingAdmin || !newAdminUid.trim()}
+                        size="sm"
+                        className="gap-1.5 font-semibold shrink-0 h-9"
+                      >
+                        {addingAdmin ? <RadioTower className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                        Grant Admin
+                      </Button>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-2">
-                    <span className="text-[11px] text-muted-foreground">
-                      💡 Default email: <code>admin@nurms.com</code> | Default master password: <code>admin</code>
+                  {/* List of Registered Admin UIDs */}
+                  <div className="space-y-2">
+                    <span className="font-semibold text-foreground text-xs flex items-center justify-between">
+                      <span>Currently Registered Admins ({Object.keys(adminUids).length})</span>
+                      <span className="text-[11px] text-muted-foreground font-mono">Realtime Database: admins/</span>
                     </span>
-                    <Button
-                      type="button"
-                      onClick={handleUpdateAdminPassword}
-                      disabled={updatingPassword}
-                      size="sm"
-                      className="gap-1.5 font-semibold"
-                    >
-                      {updatingPassword ? (
-                        <RadioTower className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Save className="w-3.5 h-3.5" />
-                      )}
-                      {updatingPassword ? 'Updating...' : 'Update Admin Password'}
-                    </Button>
+
+                    {Object.keys(adminUids).length === 0 ? (
+                      <div className="p-4 rounded-lg border border-dashed text-center text-muted-foreground">
+                        No admin UIDs registered yet. The first authenticated user will be initialized automatically.
+                      </div>
+                    ) : (
+                      <div className="space-y-1.5">
+                        {Object.entries(adminUids).map(([uidKey, val]) => {
+                          const isMe = currentAdmin?.uid === uidKey;
+                          return (
+                            <div
+                              key={uidKey}
+                              className="p-2.5 rounded-lg border bg-card/60 flex items-center justify-between gap-2"
+                            >
+                              <div className="flex items-center gap-2 overflow-hidden">
+                                <Badge variant="success" className="text-[9px] px-1.5 py-0 shrink-0">
+                                  Active (true)
+                                </Badge>
+                                <code className="font-mono text-xs text-white truncate max-w-sm" title={uidKey}>
+                                  {uidKey}
+                                </code>
+                                {isMe && (
+                                  <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
+                                    You
+                                  </Badge>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(uidKey);
+                                    alert(`Copied UID: ${uidKey}`);
+                                  }}
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 w-7 p-0 text-muted-foreground hover:text-white"
+                                  title="Copy UID"
+                                >
+                                  <Copy className="w-3.5 h-3.5" />
+                                </Button>
+                                {!isMe && (
+                                  <Button
+                                    type="button"
+                                    onClick={() => handleRemoveAdminUid(uidKey)}
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-rose-400"
+                                    title="Revoke Admin Access"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
