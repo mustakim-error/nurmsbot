@@ -19,8 +19,11 @@ import {
   ShieldCheck, 
   AlertCircle,
   ExternalLink,
-  Coins
+  Coins,
+  Zap,
+  RefreshCw
 } from 'lucide-react';
+import { verifyOnChainTx } from '@/lib/cryptoVerifier';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +54,8 @@ interface PaymentGateway {
   instruction?: string;
   active: boolean;
   order: number;
+  autoApprove?: boolean;
+  autoApproveAmount?: number;
 }
 
 interface DepositRequest {
@@ -62,6 +67,9 @@ interface DepositRequest {
   txId: string;
   amount?: number;
   status: 'pending' | 'approved' | 'rejected';
+  autoVerified?: boolean;
+  method?: string;
+  note?: string;
   createdAt: string;
   updatedAt?: string;
 }
@@ -137,6 +145,8 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
     warning: 'For more than 5.00 USDT, please use one of the other payment methods — they are credited automatically. Send only USDT via Binance Pay to the ID above.',
     active: true,
     order: 5,
+    autoApprove: true,
+    autoApproveAmount: 5.0,
   },
   {
     id: 'bybit-pay',
@@ -151,6 +161,8 @@ const DEFAULT_GATEWAYS: PaymentGateway[] = [
     warning: 'Send USDT via Bybit internal transfer to the UID above and submit your Transaction ID.',
     active: true,
     order: 6,
+    autoApprove: true,
+    autoApproveAmount: 5.0,
   },
   {
     id: 'ltc',
@@ -304,6 +316,8 @@ export default function GatewaysPage() {
         warning: gatewayForm.warning || '',
         active: gatewayForm.active !== undefined ? gatewayForm.active : true,
         order: Number(gatewayForm.order) || 1,
+        autoApprove: gatewayForm.autoApprove !== undefined ? gatewayForm.autoApprove : true,
+        autoApproveAmount: Number(gatewayForm.autoApproveAmount) || 5.0,
         updatedAt: new Date().toISOString(),
       });
 
@@ -335,6 +349,59 @@ export default function GatewaysPage() {
     setIsApproveDialogOpen(true);
   };
 
+  // State for on-chain live check
+  const [checkingDepId, setCheckingDepId] = useState<string | null>(null);
+
+  // Auto Check On-Chain Transaction for Pending Deposit
+  const handleAutoCheckOnChain = async (dep: DepositRequest) => {
+    const targetGateway = gateways.find((g) => g.id === dep.gatewayId) || {
+      id: dep.gatewayId,
+      network: 'BSC (BEP20)',
+      address: '0xAfCdaAfA2e75A543B2A120c31a05708982Bd4b7F',
+    };
+    setCheckingDepId(dep.id);
+
+    try {
+      const result = await verifyOnChainTx(targetGateway, dep.txId);
+      if (result.verified) {
+        const verifiedAmount = result.amount || 1.0;
+        if (confirm(`⚡ Blockchain Verified Successfully!\n\nNetwork: ${(result.chain || 'BSC').toUpperCase()}\nCredited Amount: $${verifiedAmount.toFixed(2)} USDT\n\nCredit $${verifiedAmount.toFixed(2)} to ${dep.userName} (${dep.userId}) now?`)) {
+          const userRef = ref(rtdb, `users/${dep.userId}`);
+          const userSnap = await (await import('firebase/database')).get(userRef);
+          const userData = userSnap.exists() ? userSnap.val() : { balance: 0 };
+          const currentBalance = Number(userData.balance || 0);
+          const newBalance = currentBalance + verifiedAmount;
+
+          await update(userRef, { balance: newBalance, updatedAt: new Date().toISOString() });
+          await update(ref(rtdb, `deposits/${dep.id}`), {
+            status: 'approved',
+            amount: verifiedAmount,
+            creditedBalance: newBalance,
+            autoVerified: true,
+            method: 'onchain_auto',
+            chain: result.chain,
+            updatedAt: new Date().toISOString(),
+          });
+
+          const safeTxKey = dep.txId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+          await set(ref(rtdb, `processed_txs/${safeTxKey}`), {
+            txId: dep.txId,
+            userId: dep.userId,
+            amount: verifiedAmount,
+            verifiedAt: new Date().toISOString(),
+            method: 'onchain_auto',
+          });
+        }
+      } else {
+        alert(`⚠️ On-Chain Verification Notice:\n${result.reason || 'Could not verify transaction on blockchain.'}`);
+      }
+    } catch (err: any) {
+      alert(`Auto-check error: ${err.message}`);
+    } finally {
+      setCheckingDepId(null);
+    }
+  };
+
   // Confirm Deposit Approval & Credit Balance to User
   const handleConfirmApproval = async () => {
     if (!selectedDeposit) return;
@@ -363,6 +430,16 @@ export default function GatewaysPage() {
         amount: amountToAdd,
         creditedBalance: newBalance,
         updatedAt: new Date().toISOString(),
+      });
+
+      // 4. Record in processed_txs to prevent duplicate reuse
+      const safeTxKey = selectedDeposit.txId.toLowerCase().replace(/[^a-z0-9]/g, '_');
+      await set(ref(rtdb, `processed_txs/${safeTxKey}`), {
+        txId: selectedDeposit.txId,
+        userId: selectedDeposit.userId,
+        amount: amountToAdd,
+        verifiedAt: new Date().toISOString(),
+        method: 'manual_admin',
       });
 
       setIsApproveDialogOpen(false);
@@ -503,9 +580,16 @@ export default function GatewaysPage() {
                       </TableCell>
                       <TableCell>
                         {dep.status === 'approved' && (
-                          <Badge variant="success" className="text-[11px] gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> Approved (+${dep.amount?.toFixed(2) || '0.00'})
-                          </Badge>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge variant="success" className="text-[11px] gap-1">
+                              <CheckCircle2 className="w-3 h-3" /> Approved (+${dep.amount?.toFixed(2) || '0.00'})
+                            </Badge>
+                            {dep.autoVerified && (
+                              <Badge className="bg-primary/20 text-primary border-primary/30 text-[10px] gap-1 font-mono">
+                                <Zap className="w-2.5 h-2.5" /> Auto-Verified
+                              </Badge>
+                            )}
+                          </div>
                         )}
                         {dep.status === 'rejected' && (
                           <Badge variant="destructive" className="text-[11px] gap-1">
@@ -524,6 +608,23 @@ export default function GatewaysPage() {
                       <TableCell className="text-right">
                         {dep.status === 'pending' ? (
                           <div className="flex items-center justify-end gap-1.5">
+                            {dep.txId.startsWith('0x') && (
+                              <Button
+                                onClick={() => handleAutoCheckOnChain(dep)}
+                                disabled={checkingDepId === dep.id}
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs font-semibold gap-1 border-primary/40 text-primary hover:bg-primary/10"
+                                title="Run automated blockchain verification for this hash"
+                              >
+                                {checkingDepId === dep.id ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Zap className="w-3 h-3" />
+                                )}
+                                Auto-Check
+                              </Button>
+                            )}
                             <Button
                               onClick={() => handleOpenApprove(dep)}
                               size="sm"
@@ -614,11 +715,22 @@ export default function GatewaysPage() {
                       {gw.minDeposit} - {gw.maxDeposit}
                     </TableCell>
                     <TableCell>
-                      <button onClick={() => handleToggleActive(gw)}>
-                        <Badge variant={gw.active ? 'success' : 'secondary'} className="cursor-pointer text-[10px]">
-                          {gw.active ? 'Active (Live in Bot)' : 'Disabled'}
-                        </Badge>
-                      </button>
+                      <div className="flex flex-col gap-1 items-start">
+                        <button onClick={() => handleToggleActive(gw)}>
+                          <Badge variant={gw.active ? 'success' : 'secondary'} className="cursor-pointer text-[10px]">
+                            {gw.active ? 'Active (Live in Bot)' : 'Disabled'}
+                          </Badge>
+                        </button>
+                        {gw.autoApprove !== false ? (
+                          <Badge className="bg-primary/20 text-primary border-primary/30 text-[9px] gap-0.5">
+                            <Zap className="w-2.5 h-2.5" /> Auto-Credit ON
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-muted-foreground text-[9px]">
+                            Manual 1-Click
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
@@ -748,15 +860,49 @@ export default function GatewaysPage() {
               </div>
             </div>
 
-            <div>
-              <label className="block font-medium text-foreground mb-1">Warning / Important Note (Shown in Bot)</label>
-              <textarea
-                rows={2}
-                placeholder="Important: Only send on this network..."
-                value={gatewayForm.warning}
-                onChange={(e) => setGatewayForm({ ...gatewayForm, warning: e.target.value })}
-                className="w-full rounded-lg border border-input bg-background/50 px-3 py-2 text-xs text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary"
-              />
+            {/* Automated Instant Credit Settings */}
+            <div className="p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label htmlFor="autoApproveToggle" className="font-semibold text-white text-xs flex items-center gap-1.5 cursor-pointer">
+                    <Zap className="w-3.5 h-3.5 text-primary" />
+                    ⚡ Automatic Instant Credit Mode
+                  </label>
+                  <p className="text-[11px] text-muted-foreground">
+                    {gatewayForm.type === 'crypto_address'
+                      ? 'On-chain RPC detector verifies blockchain transaction and credits user wallet automatically.'
+                      : 'Automatically verifies and credits unique 18-digit Order IDs instantly without waiting for admin.'}
+                  </p>
+                </div>
+                <input
+                  type="checkbox"
+                  id="autoApproveToggle"
+                  checked={gatewayForm.autoApprove !== false}
+                  onChange={(e) => setGatewayForm({ ...gatewayForm, autoApprove: e.target.checked })}
+                  className="h-4 w-4 rounded accent-primary cursor-pointer"
+                />
+              </div>
+
+              {gatewayForm.type === 'uid' && gatewayForm.autoApprove !== false && (
+                <div className="pt-2 border-t border-primary/10 grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-medium text-foreground mb-1">
+                      Auto-Credit Amount ($ USD)
+                    </label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="5.00"
+                      value={gatewayForm.autoApproveAmount || 5.0}
+                      onChange={(e) => setGatewayForm({ ...gatewayForm, autoApproveAmount: parseFloat(e.target.value) || 5.0 })}
+                      className="h-8 text-xs font-mono font-bold text-primary"
+                    />
+                  </div>
+                  <div className="text-[10px] text-muted-foreground flex items-center">
+                    Unique 18-digit Binance / Bybit Order IDs will be credited this amount immediately.
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter className="pt-2">
