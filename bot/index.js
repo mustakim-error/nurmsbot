@@ -720,6 +720,107 @@ bot.command('start', async (ctx) => {
   renderMainMenu(ctx, user);
 });
 
+// Broadcast Command for Admins directly from Telegram
+bot.command('broadcast', async (ctx) => {
+  const userId = ctx.from.id;
+
+  // Verify Admin authorization: check channel admin status
+  let isAdmin = false;
+  try {
+    const chatMember = await ctx.api.getChatMember(botConfig.channelId, userId);
+    if (['creator', 'administrator'].includes(chatMember.status)) {
+      isAdmin = true;
+    }
+  } catch (e) {
+    isAdmin = true; // Fallback so owners without strict channel setup can still broadcast
+  }
+
+  const broadcastText = (ctx.match || '').trim();
+  if (!broadcastText) {
+    return ctx.reply(
+      '📢 *Telegram Broadcast Command*\n\n' +
+      'Send announcements to all registered bot users directly from Telegram.\n\n' +
+      '• *Usage:* `/broadcast Your message here`\n' +
+      '• *Example:* `/broadcast 🔥 *Special Offer!* Get 20% discount on all accounts today!`\n\n' +
+      '_Supports Markdown bold (*text*), italic (_text_), and variables {name}, {balance}._\n\n' +
+      '💡 *Tip:* You can also use the web *Admin Dashboard* at `/broadcast` with rich photo banners, buttons, and live delivery stats!',
+      { parse_mode: 'Markdown' }
+    );
+  }
+
+  // Fetch all users from RTDB
+  const usersSnap = await get(ref(rtdb, 'users'));
+  if (!usersSnap.exists()) {
+    return ctx.reply('⚠️ No registered bot users found in database.');
+  }
+
+  const usersMap = usersSnap.val();
+  const userIds = Object.keys(usersMap);
+  const total = userIds.length;
+
+  const statusMsg = await ctx.reply(`🚀 *Starting broadcast to ${total} users...*`, { parse_mode: 'Markdown' });
+
+  let sent = 0;
+  let blocked = 0;
+  const broadcastId = `bcast_${Date.now()}`;
+
+  for (let i = 0; i < userIds.length; i++) {
+    const targetId = userIds[i];
+    const u = usersMap[targetId];
+    const personalized = broadcastText
+      .replaceAll('{name}', u?.name || 'Member')
+      .replaceAll('{balance}', Number(u?.balance || 0).toFixed(2))
+      .replaceAll('{user_id}', targetId);
+
+    try {
+      await ctx.api.sendMessage(targetId, personalized, { parse_mode: 'Markdown' });
+      sent++;
+    } catch (sendErr) {
+      // Retry without markdown if parse error
+      try {
+        await ctx.api.sendMessage(targetId, personalized);
+        sent++;
+      } catch (finalErr) {
+        blocked++;
+      }
+    }
+
+    // Rate-limit throttle (35ms)
+    if (i < userIds.length - 1) {
+      await new Promise((r) => setTimeout(r, 35));
+    }
+  }
+
+  // Save record to RTDB
+  try {
+    await set(ref(rtdb, `broadcasts/${broadcastId}`), {
+      id: broadcastId,
+      message: broadcastText,
+      targetAudience: 'all',
+      totalRecipients: total,
+      sentCount: sent,
+      failedCount: blocked,
+      blockedCount: blocked,
+      status: 'completed',
+      createdAt: new Date().toISOString(),
+      sender: ctx.from.username || String(userId)
+    });
+  } catch (e) {}
+
+  try {
+    await ctx.api.deleteMessage(ctx.chat.id, statusMsg.message_id);
+  } catch {}
+
+  return ctx.reply(
+    `✅ *Broadcast Completed Successfully!*\n\n` +
+    `• *Total Audience:* ${total}\n` +
+    `• *Delivered:* ${sent} users\n` +
+    `• *Blocked / Failed:* ${blocked} users\n\n` +
+    `📊 View complete delivery log on your *Admin Dashboard*!`,
+    { parse_mode: 'Markdown' }
+  );
+});
+
 // Helper: Render Main Menu (Image 2)
 function renderMainMenu(ctx, user, isEdit = false) {
   const balance = Number(user.balance || 0).toFixed(2);

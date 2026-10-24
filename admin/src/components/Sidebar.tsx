@@ -17,7 +17,8 @@ import {
   Coins,
   ArrowLeftRight,
   LogOut,
-  ShieldCheck
+  ShieldCheck,
+  Megaphone
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -32,6 +33,7 @@ const navigation = [
   { name: 'Order History', href: '/orders', icon: Receipt },
   { name: 'Transactions', href: '/transactions', icon: ArrowLeftRight },
   { name: 'Users & Wallets', href: '/users', icon: Users },
+  { name: 'Broadcast', href: '/broadcast', icon: Megaphone },
   { name: '24/7 Uptime & Cron', href: '/uptime', icon: Activity },
   { name: 'Bot Settings', href: '/settings', icon: Settings },
 ];

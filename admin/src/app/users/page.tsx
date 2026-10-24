@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { rtdb } from '@/lib/firebase';
 import { ref, onValue, update } from 'firebase/database';
-import { Users, DollarSign, Wallet, Search, ArrowUpRight, Plus, Minus, UserCheck, RadioTower, Gift, UserPlus, Sparkles, TrendingUp } from 'lucide-react';
+import { Users, DollarSign, Wallet, Search, ArrowUpRight, Plus, Minus, UserCheck, RadioTower, Gift, UserPlus, Sparkles, TrendingUp, Megaphone } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -98,15 +99,24 @@ export default function UsersPage() {
           </p>
         </div>
 
-        {/* Search */}
-        <div className="relative w-full sm:w-72">
-          <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
-          <Input
-            placeholder="Search by ID or username..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-xs"
-          />
+        {/* Actions & Search */}
+        <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
+          <Link href="/broadcast">
+            <Button size="sm" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-white font-semibold text-xs h-9 px-3.5 gap-1.5 shadow-sm shadow-primary/20">
+              <Megaphone className="w-4 h-4" />
+              <span>Broadcast to All</span>
+            </Button>
+          </Link>
+
+          <div className="relative w-full sm:w-72">
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-2.5" />
+            <Input
+              placeholder="Search by ID or username..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 text-xs"
+            />
+          </div>
         </div>
       </div>
 

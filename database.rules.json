@@ -55,6 +55,10 @@
     "processed_txs": {
       ".read": true,
       ".write": true
+    },
+    "broadcasts": {
+      ".read": true,
+      ".write": true
     }
   }
 }
